@@ -13,26 +13,17 @@ client_name = ''
 def connectToServer():
     global client_socket
     client_socket = socket(AF_INET, SOCK_STREAM)
-    global client_name
-    client_name = raw_input('Please, insert your name: ')
+    #global client_name
+    #client_name = raw_input('Please, insert your name: ')
     # Conection
     print 'Connecting to server...'
     client_socket.connect(('127.0.0.1', 8080))
 
 def main():
     printMenu()
-    option = raw_input('\nChose an option,' + client_name + ': ')
+    #option = raw_input('\nChose an option,' + client_name + ': ')
+    option = raw_input('\nChose an option: ')
     process(option)
-
-#Begin
-try:
-    print "Welcome!!"
-    connectToServer()
-    main()
-except KeyboardInterrupt:
-    pass
-#.....
-
 
 def printMenu():
     print '\n************************ MENU ************************ \n'
@@ -143,3 +134,12 @@ def status():
 
 def exit():
     sys.exit('\n***Client closed by your order')
+
+#Begin
+try:
+    print "Welcome!!"
+    connectToServer()
+    main()
+except KeyboardInterrupt:
+    pass
+#.....
