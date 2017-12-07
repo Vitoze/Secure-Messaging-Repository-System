@@ -16,6 +16,8 @@ from log import *
 from server_client import *
 from server_registry import *
 from server_actions import *
+from primeGenerator import prime_root, primes
+import random
 
 # Server address
 HOST = ""   # All available interfaces
@@ -61,6 +63,18 @@ class Server:
         # If we delClient instead, the following would be unnecessary...
         self.clients.clear()
 
+    def initDH(self, c):
+        #Inicializar variaveis
+        c.a = random.randint(2, 30)
+        c.p = random.choice(primes(200))
+        g = random.choice(prime_root(c.p))
+        
+        #Calcular A = g^a mod p
+        A = (g**c.a)%c.p
+        
+        #Enviar mensagem para o cliente com o A, g e p para o cliente poder calcular B e K
+        c.sendResult({'A' : A, 'g' : g, 'p' : c.p})
+
     def addClient(self, csock, addr):
         """Add a client connecting in csock."""
         if csock in self.clients:
@@ -71,6 +85,7 @@ class Server:
         client = Client(csock, addr)
         self.clients[client.socket] = client
         log(logging.DEBUG, "Client added: %s" % client)
+        self.initDH(client)
 
     def delClient(self, csock):
         """Delete a client connected in csock."""
@@ -169,8 +184,6 @@ class Server:
             for s in xl:
                 log(logging.ERROR, "EXCEPTION in %s. Closing" % s)
                 self.delClient(s)
-
-
 
 
 if __name__ == "__main__":

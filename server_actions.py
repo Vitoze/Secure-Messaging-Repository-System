@@ -15,7 +15,8 @@ class ServerActions:
             'recv': self.processRecv,
             'create': self.processCreate,
             'receipt': self.processReceipt,
-            'status': self.processStatus
+            'status': self.processStatus,
+            'dh': self.processDH
         }
 
         self.registry = ServerRegistry()
@@ -218,3 +219,19 @@ class ServerActions:
 
         response = self.registry.getReceipts(fromId, msg)
         client.sendResult({"result": response})
+
+    def processDH(self, data, client):
+        log(logging.DEBUG, "%s" % json.dumps(data))
+
+        #verificar se a mensagem esta no formato correto
+        if not set({'B'}).issubset(set(data.keys())):
+            log(logging.ERROR, "Badly formated \"status\" message: " +
+                json.dumps(data))
+            client.sendResult({"error": "wrong message format"})
+
+        #verificar se B e um inteiro
+        if isinstance(data['B'], int):
+            #verificar se B nao e nulo
+            if data['B'] != 0:
+                #Calcular K = B^a mod p
+                client.skey = (data['B']**client.a)%client.p

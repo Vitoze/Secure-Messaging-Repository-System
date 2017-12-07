@@ -5,6 +5,8 @@ import sys
 import time
 import logging
 import ast
+import random
+from primeGenerator import prime_root, primes
 
 #variable initialization
 BUFSIZE = 512 * 1024
@@ -18,6 +20,33 @@ def connectToServer():
     # Conection
     print 'Connecting to server...'
     client_socket.connect(('127.0.0.1', 8080))
+
+    data = None
+    #waiting received A, g and p from server
+    while True:
+            rec = client_socket.recv(BUFSIZE)
+            if rec is not None:
+                data = ast.literal_eval(rec)
+                #verificar se o data nao esta vazio, como estamos a espera que tenha 3 campos basta verificar que se o tamanho e 3
+                if(len(data.keys()) == 3):
+                    #verificar se o dicionario contem os campos pretendidos
+                    if((data.keys()[0] == 'A') and (data.keys()[1] == 'p') and (data.keys()[2] == 'g')):
+                        #verificar se os conteudos dos campos sao int
+                        if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
+                            #verificar se os conteudos dos campos nao sao nulos
+                            if((data['A'] != 0) and (data['g'] != 0) and (data['p'] != 0)):
+                                break
+
+    #Calcular B = g^b mod p
+    b = random.randint(2, 30)
+    B = (data['g']**b)%data['p']
+    
+    #Mensagem dh para enviar B ao server
+    msg = {'type' : 'dh', 'B' : B}
+    client_socket.send(json.dumps(msg) + "\r\n")
+
+    #Calcular K = A^b mod p 
+    K = (data['A']**b)%data['p']
 
 def main():
     printMenu()

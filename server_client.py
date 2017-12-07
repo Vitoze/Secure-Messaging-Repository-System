@@ -18,6 +18,9 @@ class Client:
         self.addr = addr
         self.id = None
         self.sa_data = None
+        self.p = None
+        self.a = None
+        self.skey = None
 
     def __str__(self):
         """ Converts object into string.
