@@ -27,15 +27,17 @@ def connectToServer():
             rec = client_socket.recv(BUFSIZE)
             if rec is not None:
                 data = ast.literal_eval(rec)
-                #verificar se o data nao esta vazio, como estamos a espera que tenha 3 campos basta verificar que se o tamanho e 3
-                if(len(data.keys()) == 3):
-                    #verificar se o dicionario contem os campos pretendidos
-                    if((data.keys()[0] == 'A') and (data.keys()[1] == 'p') and (data.keys()[2] == 'g')):
-                        #verificar se os conteudos dos campos sao int
-                        if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
-                            #verificar se os conteudos dos campos nao sao nulos
-                            if((data['A'] != 0) and (data['g'] != 0) and (data['p'] != 0)):
-                                break
+                #verificar se a mensagem esta no formato correto
+                if set({'A', 'g', 'p'}).issubset(set(data.keys())):
+                    #verificar se os conteudos dos campos sao int
+                    if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
+                        #verificar se os conteudos dos campos nao sao nulos
+                        if((data['A'] != 0) and (data['g'] != 0) and (data['p'] != 0)):
+                            break
+                else:
+                    log(logging.ERROR, "Badly formated \"status\" message: " +
+                        json.dumps(data))
+                    client_socket.sendResult({"error": "wrong message format"})
 
     #Calcular B = g^b mod p
     b = random.randint(2, 30)
