@@ -7,17 +7,23 @@ import logging
 import ast
 import random
 from primeGenerator import prime_root, primes
+import hashlib
+from ciphers import *
+import os
+import errno
 
 #variable initialization
 BUFSIZE = 512 * 1024
 client_name = ''
+K = None
 
 def connectToServer():
     global client_socket
-    client_socket = socket(AF_INET, SOCK_STREAM)
-    #global client_name
-    #client_name = raw_input('Please, insert your name: ')
+    global client_name
+    client_name = raw_input('Please, insert your name: ')
+    
     # Conection
+    client_socket = socket(AF_INET, SOCK_STREAM)
     print 'Connecting to server...'
     client_socket.connect(('127.0.0.1', 8080))
 
@@ -49,6 +55,13 @@ def connectToServer():
 
     #Calcular K = A^b mod p 
     K = (data['A']**b)%data['p']
+    secret = hashlib.sha256(str(K)).digest()
+
+    print "\nSecret %s" % secret
+    print '...Connected!'
+    print 'Welcome client',client_name,'!\n'
+
+    create_directory()
 
 def main():
     printMenu()
@@ -100,7 +113,15 @@ def process(op):
 
 #Create user message box
 def create_user_message_box():
-    msg = {'type' : 'create', 'uuid' : 4}   # uuid???
+    aes = AESCipher(K)
+    uuid = 4
+
+    m = "{'type' : 'create', 'uuid' : %s}" % (uuid)
+    
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "create")
+
+    msg = {'type' : 'create', 'uuid' : uuid}   # uuid???
     client_socket.send(json.dumps(msg) + "\r\n")
     data = client_socket.recv(BUFSIZE)
     print data
@@ -108,6 +129,14 @@ def create_user_message_box():
 
 #List users message boxes
 def list_users_msg():
+    aes = AESCipher(K)
+    uuid = 4
+
+    m = "{'type' : 'list'}"
+    
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "list")
+
     list = {'type' : 'list'}
     client_socket.send(json.dumps(list) + "\r\n")
     lst = client_socket.recv(BUFSIZE)
@@ -116,7 +145,15 @@ def list_users_msg():
 
 #New messages
 def new_msg():
-    newmsg = {'type' : 'new', 'id' : 1}
+    aes = AESCipher(K)
+    nid = 4
+
+    m = "{'type' : 'new', 'id' : %s}" % (nid)
+    
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "new")
+
+    newmsg = {'type' : 'new', 'id' : nid}
     client_socket.send(json.dumps(newmsg) + "\r\n")
     newmsglst = client_socket.recv(BUFSIZE)
     print newmsglst
@@ -124,7 +161,15 @@ def new_msg():
 
 #All new messages
 def new_all_msg():
-    allmsg = {'type' : 'all', 'id' : 1}
+    aes = AESCipher(K)
+    nid = 4
+
+    m = "{'type' : 'all', 'id' : %s}" % (nid)
+    
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "all")
+
+    allmsg = {'type' : 'all', 'id' : nid}
     client_socket.send(json.dumps(allmsg) + "\r\n")
     allmsglst = client_socket.recv(BUFSIZE)
     print allmsglst
@@ -140,7 +185,16 @@ def send_msg():
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
-    recvmsg = {'type' : 'recv', 'id' : 1, 'msg' : 1}
+    aes = AESCipher(K)
+    nid = 4
+    msg = ''
+
+    m = "{'type' : 'recv', 'nid' : %s, 'msg' : %s}" % (nid, msg)
+    
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "recv")
+
+    recvmsg = {'type' : 'recv', 'id' : nid, 'msg' : msg}
     client_socket.send(json.dumps(recvmsg) + "\r\n")
     recvmsglst = client_socket.recv(BUFSIZE)
     print recvmsglst
@@ -149,7 +203,17 @@ def recv_msg_from_mb():
 
 #Send receipt for a message
 def send_receipt():
-    receiptmsg = {'type' : 'receipt', 'id' : 1, 'msg' : 1, 'receipt' : ''}
+    aes = AESCipher(K)
+    nid = 4
+    msg = ''
+    receipt = ''
+
+    m = "{'type' : 'receipt', 'id' : %s, 'msg' : %s, 'receipt' : %s}" % (nid, msg, receipt)
+    
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "receipt")
+
+    receiptmsg = {'type' : 'receipt', 'id' : nid, 'msg' : msg, 'receipt' : receipt}
     client_socket.send(json.dumps(receiptmsg) + "\r\n")
     receiptmsglst = client_socket.recv(BUFSIZE)
     print receiptmsglst
@@ -157,7 +221,16 @@ def send_receipt():
 
 #Status
 def status():
-    statmsg = {'type' : 'status', 'id' : 1, 'msg' : 1}
+    aes = AESCipher(K)
+    nid = 4
+    msg = ''
+
+    m = "{'type' : 'status', 'id' : %s, 'msg' : %s}" % (nid, msg)
+
+    encrypted_m = aes.encrypt(m)
+    write_msg(encrypted_m, "status")
+
+    statmsg = {'type' : 'status', 'id' : nid, 'msg' : msg}
     client_socket.send(json.dumps(statmsg) + "\r\n")
     statmsglst = client_socket.recv(BUFSIZE)
     print statmsglst
@@ -165,6 +238,35 @@ def status():
 
 def exit():
     sys.exit('\n***Client closed by your order')
+
+def create_directory():
+    global directory
+    n = os.getcwd() + "/" + client_name + "/"
+    directory = os.path.dirname(n)
+
+    try:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+    except OSError as exception:
+            log(logging.ERROR, str(exception.errno))
+
+def write_msg(msg, name):
+    count = 0
+    print(msg)
+    print(name)
+    print(directory)
+    filename = directory + "/" + name + ".txt"
+    while os.path.exists(filename):
+        count++
+        filename = directory + "/" + name + "(" + count + ")" + ".txt"
+
+    try:
+        file = open(filename, 'w+')
+        file.write(msg)
+    except:
+        log(logging.ERROR, str(exception.errno))
+
+    file.close()
 
 #Begin
 try:
