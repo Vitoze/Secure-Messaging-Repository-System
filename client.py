@@ -11,20 +11,21 @@ import hashlib
 from ciphers import *
 import os
 import errno
+from log import *
 
 #variable initialization
 BUFSIZE = 512 * 1024
 client_name = ''
-K = None
-privkey = None 
-symkey = None
-pubkey = None
+global K
+K = 0
+privkey = ''
+symkey = ''
+pubkey = ''
 aes = None
 rsa = None
 
 def connectToServer():
-    global client_socket
-    global client_name
+    global client_socket, client_name, privkey, symkey, pubkey, K
     client_name = raw_input('Please, insert your name: ')
     
     # Conection
@@ -61,7 +62,6 @@ def connectToServer():
     #Calcular K = A^b mod p 
     K = (data['A']**b)%data['p']
 
-    print "\nSecret %s" % secret
     print '...Connected!'
     print 'Welcome client',client_name,'!\n'
 
@@ -245,36 +245,39 @@ def create_directory():
     try:
         if not os.path.exists(directory):
             os.makedirs(directory)
-    except OSError as exception:
-            log(logging.ERROR, str(exception.errno))
+    except OSError as e:
+            log(logging.ERROR, str(e.errno))
 
 def write_msg(msg, name):
     count = 0
 
     filename = directory + "/" + name + ".txt"
     while os.path.exists(filename):
-        count++
+        count += 1
         filename = directory + "/" + name + "(" + count + ")" + ".txt"
 
     try:
         file = open(filename, 'w+')
         file.write(msg)
-    except:
-        log(logging.ERROR, str(exception.errno))
+    except e:
+        log(logging.ERROR, str(e.errno))
 
     file.close()
 
+
 def read_keys():
+    global privkey, pubkey, symkey, rsa, aes, k
+
     filename1 = directory + "/privkey.txt"
     filename2 = directory + "/symkey.txt"
 
     if os.path.exists(filename1):
         try:
-            file = open(filename1, 'r')
+            file = open(filename1, 'r+')
             privkey = file.read()
             rsa = RSACipher(K, privkey, None)
-        except:
-            log(logging.ERROR, str(exception.errno))
+        except OSError as e:
+            log(logging.ERROR, str(e.errno))
 
         file.close()
     else:
@@ -286,25 +289,27 @@ def read_keys():
 
     if os.path.exists(filename2):
         try:
-            file = open(filename2, 'r')
+            file = open(filename2, 'r+')
             symkey = file.read()
             aes = AESCipher(symkey)
-        except:
-            log(logging.ERROR, str(exception.errno))
+        except OSError as e:
+            log(logging.ERROR, str(e.errno))
 
         file.close()
     else:
         secret = hashlib.sha256(str(K)).digest()
         aes = AESCipher(secret)
+        symkey = secret
         save_key(aes.key, filename2)
+
 
 def save_key(key, directory):
 
     try:
         file = open(directory, 'w+')
         file.write(key)
-    except:
-        log(logging.ERROR, str(exception.errno))
+    except OSError as e:
+        log(logging.ERROR, str(e.errno))
 
     file.close()
 

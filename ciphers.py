@@ -29,10 +29,10 @@ class AESCipher(object):
 
 
 class RSACipher(object):
-	def __init__(self, key, pubkey, privkey):
+	def __init__(self, key, privkey, pubkey):
 		self.skey_cipher = AESCipher(hashlib.sha256(str(key)).digest())
-		self.pubkey = pubkey
 		self.privkey = privkey
+		self.pubkey = pubkey
 
 	def encrypt_pub(self, data):
 		pubkey_obj = RSA.importKey(self.pubkey)
@@ -48,7 +48,7 @@ class RSACipher(object):
 	def decrypt_skey(self, data):
 		return self.skey_cipher.decrypt(data)
 
-	def create_asymmetric_key():
+	def create_asymmetric_key(self):
 		key = RSA.generate(1024, e=65537)
 		pubkey = key.publickey().exportKey('PEM')
 		privkey = key.exportKey('PEM')
