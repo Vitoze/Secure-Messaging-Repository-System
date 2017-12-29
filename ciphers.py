@@ -13,7 +13,7 @@ unpad = lambda s : s[:-ord(s[len(s)-1:])]
 class AESCipher(object):
 	"""docstring for AESCipher"""
 	def __init__(self, key):
-		self.key = hashlib.sha256(str(key)).digest()
+		self.key = key
 
 	def encrypt(self, raw):
 		raw = pad(raw)
@@ -29,9 +29,10 @@ class AESCipher(object):
 
 
 class RSACipher(object):
-	def __init__(self, key):
-		self.skey_cipher = AESCipher(hashlib.sha256(str(key)).digest()) 
-		(self.privkey, self.pubkey) = self.create_asymmetric_key()
+	def __init__(self, key, pubkey, privkey):
+		self.skey_cipher = AESCipher(hashlib.sha256(str(key)).digest())
+		self.pubkey = pubkey
+		self.privkey = privkey
 
 	def encrypt_pub(self, data):
 		pubkey_obj = RSA.importKey(self.pubkey)
@@ -47,7 +48,6 @@ class RSACipher(object):
 	def decrypt_skey(self, data):
 		return self.skey_cipher.decrypt(data)
 
-	@staticmethod
 	def create_asymmetric_key():
 		key = RSA.generate(1024, e=65537)
 		pubkey = key.publickey().exportKey('PEM')

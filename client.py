@@ -16,6 +16,11 @@ import errno
 BUFSIZE = 512 * 1024
 client_name = ''
 K = None
+privkey = None 
+symkey = None
+pubkey = None
+aes = None
+rsa = None
 
 def connectToServer():
     global client_socket
@@ -55,13 +60,13 @@ def connectToServer():
 
     #Calcular K = A^b mod p 
     K = (data['A']**b)%data['p']
-    secret = hashlib.sha256(str(K)).digest()
 
     print "\nSecret %s" % secret
     print '...Connected!'
     print 'Welcome client',client_name,'!\n'
 
     create_directory()
+    read_keys()
 
 def main():
     printMenu()
@@ -113,7 +118,6 @@ def process(op):
 
 #Create user message box
 def create_user_message_box():
-    aes = AESCipher(K)
     uuid = 4
 
     m = "{'type' : 'create', 'uuid' : %s}" % (uuid)
@@ -129,7 +133,6 @@ def create_user_message_box():
 
 #List users message boxes
 def list_users_msg():
-    aes = AESCipher(K)
     uuid = 4
 
     m = "{'type' : 'list'}"
@@ -145,7 +148,6 @@ def list_users_msg():
 
 #New messages
 def new_msg():
-    aes = AESCipher(K)
     nid = 4
 
     m = "{'type' : 'new', 'id' : %s}" % (nid)
@@ -161,7 +163,6 @@ def new_msg():
 
 #All new messages
 def new_all_msg():
-    aes = AESCipher(K)
     nid = 4
 
     m = "{'type' : 'all', 'id' : %s}" % (nid)
@@ -185,7 +186,6 @@ def send_msg():
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
-    aes = AESCipher(K)
     nid = 4
     msg = ''
 
@@ -203,7 +203,6 @@ def recv_msg_from_mb():
 
 #Send receipt for a message
 def send_receipt():
-    aes = AESCipher(K)
     nid = 4
     msg = ''
     receipt = ''
@@ -221,7 +220,6 @@ def send_receipt():
 
 #Status
 def status():
-    aes = AESCipher(K)
     nid = 4
     msg = ''
 
@@ -252,9 +250,7 @@ def create_directory():
 
 def write_msg(msg, name):
     count = 0
-    print(msg)
-    print(name)
-    print(directory)
+
     filename = directory + "/" + name + ".txt"
     while os.path.exists(filename):
         count++
@@ -263,6 +259,50 @@ def write_msg(msg, name):
     try:
         file = open(filename, 'w+')
         file.write(msg)
+    except:
+        log(logging.ERROR, str(exception.errno))
+
+    file.close()
+
+def read_keys():
+    filename1 = directory + "/privkey.txt"
+    filename2 = directory + "/symkey.txt"
+
+    if os.path.exists(filename1):
+        try:
+            file = open(filename1, 'r')
+            privkey = file.read()
+            rsa = RSACipher(K, privkey, None)
+        except:
+            log(logging.ERROR, str(exception.errno))
+
+        file.close()
+    else:
+        rsa = RSACipher(K, None, None)
+        (privkey, pubkey) = rsa.create_asymmetric_key()
+        rsa.privkey = privkey
+        rsa.pubkey = pubkey
+        save_key(privkey, filename1)
+
+    if os.path.exists(filename2):
+        try:
+            file = open(filename2, 'r')
+            symkey = file.read()
+            aes = AESCipher(symkey)
+        except:
+            log(logging.ERROR, str(exception.errno))
+
+        file.close()
+    else:
+        secret = hashlib.sha256(str(K)).digest()
+        aes = AESCipher(secret)
+        save_key(aes.key, filename2)
+
+def save_key(key, directory):
+
+    try:
+        file = open(directory, 'w+')
+        file.write(key)
     except:
         log(logging.ERROR, str(exception.errno))
 
