@@ -3,6 +3,8 @@ from log import *
 from server_registry import *
 from server_client import *
 import json
+from ciphers import *
+import hashlib
 
 class ServerActions:
     def __init__(self):
@@ -61,7 +63,14 @@ class ServerActions:
             client.sendResult({"error": "wrong message format"})
             return
 
-        uuid = data['uuid']
+        # Desencriptar conteudo uuid
+        rsa = RSACipher(client.skey, None, None)
+        print("\n\n\n\n")
+        print(rsa.decrypt_skey(data['uuid']))
+        print("\n\n\n\n")
+        
+        uuid = int(rsa.decrypt_skey(data['uuid']))
+
         if not isinstance(uuid, int):
             log(logging.ERROR, "No valid \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
@@ -74,7 +83,8 @@ class ServerActions:
             return
 
         me = self.registry.addUser(data)
-        client.sendResult({"result": me.id})
+
+        client.sendResult({"result": rsa.encrypt_skey(str(me.id))})
 
     def processList(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))

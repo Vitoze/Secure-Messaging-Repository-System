@@ -12,6 +12,7 @@ from ciphers import *
 import os
 import errno
 from log import *
+import ast
 
 #variable initialization
 BUFSIZE = 512 * 1024
@@ -21,11 +22,12 @@ K = 0
 privkey = ''
 symkey = ''
 pubkey = ''
+skey = None
 aes = None
 rsa = None
 
 def connectToServer():
-    global client_socket, client_name, privkey, symkey, pubkey, K
+    global client_socket, client_name, privkey, symkey, pubkey, K, skey
     client_name = raw_input('Please, insert your name: ')
     
     # Conection
@@ -61,6 +63,7 @@ def connectToServer():
 
     #Calcular K = A^b mod p 
     K = (data['A']**b)%data['p']
+    skey = RSACipher(K, None, None)
 
     print '...Connected!'
     print 'Welcome client',client_name,'!\n'
@@ -118,17 +121,30 @@ def process(op):
 
 #Create user message box
 def create_user_message_box():
-    uuid = 4
+    global aes, skey
+
+    uuid = '15'
 
     m = "{'type' : 'create', 'uuid' : %s}" % (uuid)
     
     encrypted_m = aes.encrypt(m)
     write_msg(encrypted_m, "create")
 
-    msg = {'type' : 'create', 'uuid' : uuid}   # uuid???
+    encrypted_uuid = skey.encrypt_skey(uuid)
+    msg = {'type' : 'create', 'uuid' : encrypted_uuid}   # uuid???
     client_socket.send(json.dumps(msg) + "\r\n")
     data = client_socket.recv(BUFSIZE)
-    print data
+
+    print("\n")
+
+    data = ast.literal_eval(data)
+
+    if data.keys()[0] == "error":
+        print(data['error'])
+    else:
+        cid = int(skey.decrypt_skey(data['result']))
+        print("Cliente Id: ", cid)
+    
     main()
 
 #List users message boxes
@@ -254,7 +270,7 @@ def write_msg(msg, name):
     filename = directory + "/" + name + ".txt"
     while os.path.exists(filename):
         count += 1
-        filename = directory + "/" + name + "(" + count + ")" + ".txt"
+        filename = directory + "/" + name + "(" + str(count) + ")" + ".txt"
 
     try:
         file = open(filename, 'w+')
@@ -271,22 +287,6 @@ def read_keys():
     filename1 = directory + "/privkey.txt"
     filename2 = directory + "/symkey.txt"
 
-    if os.path.exists(filename1):
-        try:
-            file = open(filename1, 'r+')
-            privkey = file.read()
-            rsa = RSACipher(K, privkey, None)
-        except OSError as e:
-            log(logging.ERROR, str(e.errno))
-
-        file.close()
-    else:
-        rsa = RSACipher(K, None, None)
-        (privkey, pubkey) = rsa.create_asymmetric_key()
-        rsa.privkey = privkey
-        rsa.pubkey = pubkey
-        save_key(privkey, filename1)
-
     if os.path.exists(filename2):
         try:
             file = open(filename2, 'r+')
@@ -301,6 +301,22 @@ def read_keys():
         aes = AESCipher(secret)
         symkey = secret
         save_key(aes.key, filename2)
+
+    if os.path.exists(filename1):
+        try:
+            file = open(filename1, 'r+')
+            privkey = file.read()
+            rsa = RSACipher(aes.key, privkey, None)
+        except OSError as e:
+            log(logging.ERROR, str(e.errno))
+
+        file.close()
+    else:
+        rsa = RSACipher(secret, None, None)
+        (privkey, pubkey) = rsa.create_asymmetric_key()
+        rsa.privkey = privkey
+        rsa.pubkey = pubkey
+        save_key(privkey, filename1)
 
 
 def save_key(key, directory):
