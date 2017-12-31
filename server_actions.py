@@ -5,6 +5,9 @@ from server_client import *
 import json
 from ciphers import *
 import hashlib
+import M2Crypto
+from OpenSSL import crypto
+from certificates import *
 
 class ServerActions:
     def __init__(self):
@@ -31,6 +34,7 @@ class ServerActions:
                          (client, repr(request)))
 
             try:
+
                 req = json.loads(request)
             except:
                 logging.exception("Invalid message from client")
@@ -64,19 +68,23 @@ class ServerActions:
             return
 
         # Desencriptar conteudo uuid
-        rsa = RSACipher(client.skey, None, None)
-        print("\n\n\n\n")
-        print(rsa.decrypt_skey(data['uuid']))
-        print("\n\n\n\n")
+        #rsa = RSACipher(client.skey, None, None)
+        #print("\n\n\n\n")
+        #print(rsa.decrypt_skey(data['uuid']))
+        #print("\n\n\n\n")
         
-        uuid = int(rsa.decrypt_skey(data['uuid']))
+        #uuid = int(rsa.decrypt_skey(data['uuid']))
 
+        uuid = base64.decodestring(data['uuid'])
+
+        '''
         if not isinstance(uuid, int):
             log(logging.ERROR, "No valid \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "wrong message format"})
             return
-
+        '''
+        print type(uuid)
         if self.registry.userExists(uuid):
             log(logging.ERROR, "User already exists: " + json.dumps(data))
             client.sendResult({"error": "uuid already exists"})
@@ -84,7 +92,8 @@ class ServerActions:
 
         me = self.registry.addUser(data)
 
-        client.sendResult({"result": rsa.encrypt_skey(str(me.id))})
+        #client.sendResult({"result": rsa.encrypt_skey(str(me.id))})
+        client.sendResult({"result": me.id})
 
     def processList(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -234,10 +243,49 @@ class ServerActions:
         log(logging.DEBUG, "%s" % json.dumps(data))
 
         #verificar se a mensagem esta no formato correto
-        if not set({'B'}).issubset(set(data.keys())):
+        if not set({'B', 'sign', 'cert', 'chain'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "wrong message format"})
+
+        # verify if signature is valid
+        # data['cert'] value is a pem certificate
+        #print data['cert']
+        #print type(data['cert'])
+        #coiso = str(data['cert'])
+        #string = crypto.dump_certificate(crypto.FILETYPE_PEM, data['cert'])
+        cert = M2Crypto.X509.load_cert_string(data['cert'])
+        #cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        s = data['sign']
+        print s
+        print len(s)
+        sig = base64.decodestring(s)
+        '''
+        valid_sig = crypto.verify(cert, sig, str(data['B']), "sha256")
+        if valid_sig != None:
+            log(logging.ERROR, "Badly formated \"status\" message: " +
+                json.dumps(data))
+            client.sendResult({"error": "invalid signature"})
+        '''
+
+        pub_key = cert.get_pubkey()
+        pub_key.verify_init()
+        pub_key.verify_update(str(data['B']))
+        valid_sig = pub_key.verify_final(sig)
+        if valid_sig != 1:
+            log(logging.ERROR, "Badly formated \"status\" message: " +
+                json.dumps(data))
+            client.sendResult({"error": "invalid signature"})
+
+
+        # verify if certificate is valid
+        certificate = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        chain = generateCertChain(certificate)
+        valid_cert = verifyChain(chain, certificate)
+        if valid_cert != None:
+            log(logging.ERROR, "Badly formated \"status\" message: " +
+                json.dumps(data))
+            client.sendResult({"error": "cannot validate cerfiticate with given certificate chain"})
 
         #verificar se B e um inteiro
         if isinstance(data['B'], int):
@@ -245,3 +293,4 @@ class ServerActions:
             if data['B'] != 0:
                 #Calcular K = B^a mod p
                 client.skey = (data['B']**client.a)%client.p
+        logging.info("Session Key established")

@@ -18,6 +18,10 @@ from server_registry import *
 from server_actions import *
 from primeGenerator import prime_root, primes
 import random
+from Crypto.PublicKey import RSA
+from certificates import *
+import M2Crypto
+from OpenSSL import crypto
 
 # Server address
 HOST = ""   # All available interfaces
@@ -44,6 +48,17 @@ class Server:
         # clients to manage (indexed by socket and by name):
         self.clients = {}       # clients (key is socket)
 
+        #load server private key
+        self.privkey = crypto.load_privatekey(crypto.FILETYPE_PEM, file('CCCerts/certs/Server_Certificate_KEY.pem').read())
+        #load server public key certificate
+        self.cert = crypto.load_certificate(crypto.FILETYPE_PEM, file('CCCerts/certs/Server Certificate.crt').read())
+        #create server certificate chain
+        #self.chain = crypto.X509Store()
+        #c = crypto.load_certificate(crypto.FILETYPE_PEM, file('CCCerts/certs/Certification_Authority.crt').read())
+        #self.chain.add_cert(c)
+        self.issuer = "CCCerts/certs/Certification_Authority.crt"
+        log(logging.INFO, "Keys and Certificated were successfuly loaded")
+
     def stop(self):
         """ Stops the server closing all sockets
         """
@@ -68,12 +83,30 @@ class Server:
         c.a = random.randint(2, 30)
         c.p = random.choice(primes(200))
         g = random.choice(prime_root(c.p))
-        
+
         #Calcular A = g^a mod p
         A = (g**c.a)%c.p
-        
+
+        #Assinar A
+        signature = crypto.sign(self.privkey, str(A), "sha256")
+        s = base64.encodestring(signature)
+        print signature
+        print len(s)
+
         #Enviar mensagem para o cliente com o A, g e p para o cliente poder calcular B e K
-        c.sendResult({'A' : A, 'g' : g, 'p' : c.p})
+        #c.sendResult({'A' : A, 'g' : g, 'p' : c.p, 'sign' : signature, 'cert' : self.cert, 'chain' : self.chain})
+        m = {'A': A, 'g': g, 'p': c.p, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert), 'sign' : s}
+
+        c.sendResult(m)
+
+        #print tmp
+
+        #tmp2 = tmp[:len(tmp) - 1]
+        #tmp3 = tmp2 + ',"cert":' + crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert) + ',"sign":' + s + "}"
+
+        #print tmp3
+
+        #c.bufout += tmp3
 
     def addClient(self, csock, addr):
         """Add a client connecting in csock."""
@@ -119,6 +152,7 @@ class Server:
         data = None
         try:
             data = s.recv(BUFSIZE)
+            print "DATA!!!!" + data
             log(logging.DEBUG,
                 "Received data from %s. Message:\n%r" % (client, data))
         except:

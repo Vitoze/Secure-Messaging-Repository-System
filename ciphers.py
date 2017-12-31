@@ -2,7 +2,7 @@ from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import AES
 import hashlib
-import nacl.secret
+#import nacl.secret
 import base64
 
 BS=32

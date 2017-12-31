@@ -52,6 +52,7 @@ class Client:
         """
         try:
             self.bufout += json.dumps(obj) + "\n\n"
+
         except:
             # It should never happen! And not be reported to the client!
             logging.exception("Client.send(%s)" % self)

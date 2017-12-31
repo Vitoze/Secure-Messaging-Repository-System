@@ -13,6 +13,9 @@ import os
 import errno
 from log import *
 import ast
+from smartcards import *
+from certificates import *
+from OpenSSL import crypto
 
 #variable initialization
 BUFSIZE = 512 * 1024
@@ -28,7 +31,7 @@ rsa = None
 
 def connectToServer():
     global client_socket, client_name, privkey, symkey, pubkey, K, skey
-    client_name = raw_input('Please, insert your name: ')
+    #client_name = raw_input('Please, insert your name: ')
     
     # Conection
     client_socket = socket(AF_INET, SOCK_STREAM)
@@ -40,8 +43,13 @@ def connectToServer():
     while True:
             rec = client_socket.recv(BUFSIZE)
             if rec is not None:
+                #lst = rec.split(',')
+                #data_string = lst[0] + ',' + lst[1] + ',' + lst[2] + '}'
+                #print str
                 data = ast.literal_eval(rec)
                 #verificar se a mensagem esta no formato correto
+                #if lst[3].startswith('"cert"'):
+                    #if lst[4].startswith('"sign"'):
                 if set({'A', 'g', 'p'}).issubset(set(data.keys())):
                     #verificar se os conteudos dos campos sao int
                     if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
@@ -51,14 +59,54 @@ def connectToServer():
                 else:
                     log(logging.ERROR, "Badly formated \"status\" message: " +
                         json.dumps(data))
-                    client_socket.sendResult({"error": "wrong message format"})
+                    #client_socket.sendResult({"error": "wrong message format"})
+
+    #verify if signature is valid
+    #cert = M2Crypto.X509.load_cert_string(lst[3][7:])
+    c = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+    s = data['sign']
+    print s
+    print len(s)
+    sig = base64.decodestring(s)
+    valid_sig = crypto.verify(c, sig, str(data['A']), "sha256")
+    if valid_sig != None:
+        print "Invalid Signature"
+
+    #verify if certificate is valid
+    chain = generateCertChain(c)
+    valid_cert = verifyChain(chain, c)
+    if valid_cert != None:
+        print "Cannot validate certificate with given chain"
+
 
     #Calcular B = g^b mod p
     b = random.randint(2, 30)
     B = (data['g']**b)%data['p']
-    
+
+    #get signature private key from CC
+    private_key = getCCPrivKey("CITIZEN SIGNATURE KEY")
+
+    #Assinar B para enviar ao servidor
+    sig = signWithCC(private_key, str(B))
+    s = base64.encodestring(sig)
+    print sig
+    print len(s)
+
+    #get citizen signature public key certificate
+    pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
+    signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
+    #print pub_cert.as_pem()
+
     #Mensagem dh para enviar B ao server
-    msg = {'type' : 'dh', 'B' : B}
+    msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s}
+    #msg = {'type': 'dh', 'B': B, 'cert': pub_cert.as_pem, 'sign': s}
+
+    #tmp = json.dumps(msg)
+
+    # print tmp
+
+    #tmp2 = tmp[:len(tmp) - 1]
+    #tmp3 = tmp2 + ',"cert":' + crypto.dump_certificate(crypto.FILETYPE_PEM, signCert) + ',"sign":' + s + "}"
     client_socket.send(json.dumps(msg) + "\r\n")
 
     #Calcular K = A^b mod p 
@@ -70,6 +118,8 @@ def connectToServer():
 
     create_directory()
     read_keys()
+    
+
 
 def main():
     printMenu()
@@ -123,28 +173,35 @@ def process(op):
 def create_user_message_box():
     global aes, skey
 
-    uuid = '15'
+    #uuid = '15'
+    uuid = getUuid()
+    uuid64 = base64.encodestring(uuid)
+    pub_key_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
+    signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_key_cert.as_der())
+    if uuid is not None:
 
-    m = "{'type' : 'create', 'uuid' : %s}" % (uuid)
-    
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "create")
+        #m = "{'type' : 'create', 'uuid' : %s, }" % (uuid)
 
-    encrypted_uuid = skey.encrypt_skey(uuid)
-    msg = {'type' : 'create', 'uuid' : encrypted_uuid}   # uuid???
-    client_socket.send(json.dumps(msg) + "\r\n")
-    data = client_socket.recv(BUFSIZE)
+        #encrypted_m = aes.encrypt(m)
+        #write_msg(encrypted_m, "create")
 
-    print("\n")
 
-    data = ast.literal_eval(data)
+        msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
+        #encrypted_m = skey.encrypt_skey(msg)
+        #print encrypted_m
+        client_socket.send(json.dumps(msg) + "\r\n")
+        data = client_socket.recv(BUFSIZE)
 
-    if data.keys()[0] == "error":
-        print(data['error'])
-    else:
-        cid = int(skey.decrypt_skey(data['result']))
-        print("Cliente Id: ", cid)
-    
+        print("\n")
+
+        data = ast.literal_eval(data)
+
+        if data.keys()[0] == "error":
+            print(data['error'])
+        else:
+            cid = int(skey.decrypt_skey(data['result']))
+            print("Cliente Id: ", cid)
+
     main()
 
 #List users message boxes
@@ -275,7 +332,7 @@ def write_msg(msg, name):
     try:
         file = open(filename, 'w+')
         file.write(msg)
-    except e:
+    except OSError as e:
         log(logging.ERROR, str(e.errno))
 
     file.close()
@@ -328,6 +385,17 @@ def save_key(key, directory):
         log(logging.ERROR, str(e.errno))
 
     file.close()
+
+def getUuid():
+    uuid = None
+    cert = getCertificate("CITIZEN AUTHENTICATION CERTIFICATE")
+    if cert is not None:
+        try:
+            uuid = hashlib.sha256(cert.as_pem()).digest()
+        except Exception as e:
+            print e
+    return uuid
+
 
 #Begin
 try:

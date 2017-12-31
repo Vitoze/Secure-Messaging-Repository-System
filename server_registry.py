@@ -94,7 +94,7 @@ class ServerRegistry:
             return None
 
         if isinstance(uid, str):
-            for user in users:
+            for user in self.users:
                 if user.id == uid:
                     return user
         return None
