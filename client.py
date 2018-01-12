@@ -206,47 +206,78 @@ def create_user_message_box():
 
 #List users message boxes
 def list_users_msg():
-    uuid = 4
+    global skey
 
-    m = "{'type' : 'list'}"
+    print("\n")
     
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "list")
+    while r != 'Y' or r != 'y' or r != 'N' or r != 'n':
+        r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
+        if r != 'Y' or r != 'y' or r != 'N' or r != 'n':
+            print("Wrong answer!\n")
 
-    list = {'type' : 'list'}
+    if r == 'Y' or r == 'y':
+        nid = raw_input("Introduza o ID: ")
+        encrypted_nid = skey.encrypt_skey(str(nid))
+        list = {'type' : 'list', 'id' : encrypted_nid}
+    else:
+        list = {'type' : 'list'}
+
     client_socket.send(json.dumps(list) + "\r\n")
     lst = client_socket.recv(BUFSIZE)
     print lst
+
+    lst = ast.literal_eval(lst)
+
+    if lst.keys()[0] == "error":
+        print(lst['error'])
+    else:
+        lista = skey.decrypt_skey(lst['result'])
+        print("Lista: ", lista)
+
     main()
 
 #New messages
 def new_msg():
-    nid = 4
+    global cid, skey
 
-    m = "{'type' : 'new', 'id' : %s}" % (nid)
+    encrypted_nid = skey.encrypted_nid(str(cid))
+
+    newmsg = {'type' : 'new', 'id' : encrypted_nid}
     
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "new")
-
-    newmsg = {'type' : 'new', 'id' : nid}
     client_socket.send(json.dumps(newmsg) + "\r\n")
     newmsglst = client_socket.recv(BUFSIZE)
     print newmsglst
+
+    newmsglst = ast.literal_eval(newmsglst)
+
+    if newmsglst.keys()[0] == "error":
+        print(newmsglst['error'])
+    else:
+        newmsglist = skey.decrypt_skey(newmsglst['result'])
+        print("Lista: ", newmsglist)    
+
     main()
 
 #All new messages
 def new_all_msg():
-    nid = 4
+    global cid, skey
 
-    m = "{'type' : 'all', 'id' : %s}" % (nid)
-    
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "all")
+    encrypted_nid = skey.encrypted_nid(str(cid))
 
-    allmsg = {'type' : 'all', 'id' : nid}
+    allmsg = {'type' : 'all', 'id' : encrypted_nid}
+
     client_socket.send(json.dumps(allmsg) + "\r\n")
     allmsglst = client_socket.recv(BUFSIZE)
     print allmsglst
+
+    allmsglst = ast.literal_eval(allmsglst)
+
+    if allmsglst.keys()[0] == "error":
+        print(allmsglst['error'])
+    else:
+        allmsglist = skey.decrypt_skey(allmsglst['result'])
+        print("Lista: ", allmsglist) 
+
     main()
 
 #Send message
@@ -262,11 +293,6 @@ def recv_msg_from_mb():
     nid = 4
     msg = ''
 
-    m = "{'type' : 'recv', 'nid' : %s, 'msg' : %s}" % (nid, msg)
-    
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "recv")
-
     recvmsg = {'type' : 'recv', 'id' : nid, 'msg' : msg}
     client_socket.send(json.dumps(recvmsg) + "\r\n")
     recvmsglst = client_socket.recv(BUFSIZE)
@@ -280,11 +306,6 @@ def send_receipt():
     msg = ''
     receipt = ''
 
-    m = "{'type' : 'receipt', 'id' : %s, 'msg' : %s, 'receipt' : %s}" % (nid, msg, receipt)
-    
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "receipt")
-
     receiptmsg = {'type' : 'receipt', 'id' : nid, 'msg' : msg, 'receipt' : receipt}
     client_socket.send(json.dumps(receiptmsg) + "\r\n")
     receiptmsglst = client_socket.recv(BUFSIZE)
@@ -295,11 +316,6 @@ def send_receipt():
 def status():
     nid = 4
     msg = ''
-
-    m = "{'type' : 'status', 'id' : %s, 'msg' : %s}" % (nid, msg)
-
-    encrypted_m = aes.encrypt(m)
-    write_msg(encrypted_m, "status")
 
     statmsg = {'type' : 'status', 'id' : nid, 'msg' : msg}
     client_socket.send(json.dumps(statmsg) + "\r\n")
@@ -321,21 +337,6 @@ def create_directory():
     except OSError as e:
             log(logging.ERROR, str(e.errno))
 
-def write_msg(msg, name):
-    count = 0
-
-    filename = directory + "/" + name + ".txt"
-    while os.path.exists(filename):
-        count += 1
-        filename = directory + "/" + name + "(" + str(count) + ")" + ".txt"
-
-    try:
-        file = open(filename, 'w+')
-        file.write(msg)
-    except OSError as e:
-        log(logging.ERROR, str(e.errno))
-
-    file.close()
 
 
 def read_keys():

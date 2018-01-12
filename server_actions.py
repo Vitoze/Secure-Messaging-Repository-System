@@ -98,24 +98,30 @@ class ServerActions:
     def processList(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
+        # Desencriptar conteudo
+        skey = RSACipher(client.skey, None, None)
+
         user = 0  # 0 means all users
         userStr = "all users"
         if 'id' in data.keys():
-            user = int(data['id'])
+            user = int(skey.decrypt_skey(data['id']))
             userStr = "user%d" % user
 
         log(logging.DEBUG, "List %s" % userStr)
 
         userList = self.registry.listUsers(user)
 
-        client.sendResult({"result": userList})
+        client.sendResult({"result": skey.encrypt_skey(str(userList))})
 
     def processNew(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
+        # Desencriptar conteudo
+        skey = RSACipher(client.skey, None, None)
+
         user = -1
         if 'id' in data.keys():
-            user = int(data['id'])
+            user = int(skey.decrypt_skey(data['id']))
 
         if user < 0:
             log(logging.ERROR,
@@ -124,14 +130,17 @@ class ServerActions:
             return
 
         client.sendResult(
-            {"result": self.registry.userNewMessages(user)})
+            {"result":  skey.encrypt_skey(str(self.registry.userNewMessages(user)))})
 
     def processAll(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
+        # Desencriptar conteudo
+        skey = RSACipher(client.skey, None, None)
+
         user = -1
         if 'id' in data.keys():
-            user = int(data['id'])
+            user = int(skey.encrypt_skey(data['id']))
 
         if user < 0:
             log(logging.ERROR,
@@ -139,7 +148,7 @@ class ServerActions:
             client.sendResult({"error": "wrong message format"})
             return
 
-        client.sendResult({"result": [self.registry.userAllMessages(user), self.registry.userSentMessages(user)]})
+        client.sendResult({"result": skey.encrypt_skey(str([self.registry.userAllMessages(user), self.registry.userSentMessages(user)]))})
 
     def processSend(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
