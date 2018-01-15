@@ -37,6 +37,7 @@ def connectToServer():
     client_socket = socket(AF_INET, SOCK_STREAM)
     print 'Connecting to server...'
     client_socket.connect(('127.0.0.1', 8080))
+    print 'Stablishing a secure connection...'
 
     data = None
     #waiting received A, g and p from server
@@ -113,8 +114,8 @@ def connectToServer():
     K = (data['A']**b)%data['p']
     skey = RSACipher(K, None, None)
 
-    print '...Connected!'
-    print 'Welcome client',client_name,'!\n'
+    print '...Done'
+    #print 'Welcome client',client_name,'!\n'
 
     create_directory()
     read_keys()
@@ -131,13 +132,12 @@ def printMenu():
     print '\n************************ MENU ************************ \n'
     print '1 - Create a user message box'
     print '2 - List users messages boxes'
-    print '3 - List new messages received by a user'
-    print '4 - List all messages received by a user'
+    print '3 - List new messages received'
+    print '4 - List all messages received'
     print '5 - Send message to a user'
-    print '6 - Receive a message from a user message box'
-    print '7 - Send receipt for a message'
-    print '8 - List messages sent and their receipts'
-    print '9 - Exit from aplication'
+    print '6 - Receive a message from message box'
+    print '7 - List messages sent and their receipts'
+    print '8 - Exit from aplication'
     print '******************************************************'
 
 def process(op):
@@ -148,20 +148,18 @@ def process(op):
         print 'Chosen 2 - List users messages boxes'
         list_users_msg()
     elif op == '3':
-        print 'Chosen 3 - List new messages received by a user'
+        print 'Chosen 3 - List new messages received'
         new_msg()
     elif op == '4':
-        print 'Chosen 4 - List all messages received by a user'
+        print 'Chosen 4 - List all messages received'
     elif op == '5':
         print 'Chosen 5 - Send message to a user'
     elif op == '6':
-        print 'Chosen 6 - Receive a message from a user message box'
+        print 'Chosen 6 - Receive a message from message box'
     elif op == '7':
-        print 'Chosen 7 - Send receipt for a message'
+        print 'Chosen 7 - List messages sent and their receipts'
     elif op == '8':
-        print 'Chosen 8 - List messages sent and their receipts'
-    elif op == '9':
-        print 'Chosen 9 - Exit from aplication'
+        print 'Chosen 8 - Exit from aplication'
         exit()
     else:
         print 'Option unrecognized'
@@ -176,8 +174,10 @@ def create_user_message_box():
     #uuid = '15'
     uuid = getUuid()
     uuid64 = base64.encodestring(uuid)
+    '''
     pub_key_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_key_cert.as_der())
+    '''
     if uuid is not None:
 
         #m = "{'type' : 'create', 'uuid' : %s, }" % (uuid)
@@ -186,7 +186,8 @@ def create_user_message_box():
         #write_msg(encrypted_m, "create")
 
 
-        msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
+        #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
+        msg = {'type': 'create', 'uuid': uuid64}
         #encrypted_m = skey.encrypt_skey(msg)
         #print encrypted_m
         client_socket.send(json.dumps(msg) + "\r\n")
@@ -202,7 +203,6 @@ def create_user_message_box():
             cid = int(skey.decrypt_skey(data['result']))
             print("Cliente Id: ", cid)
 
-    main()
 
 #List users message boxes
 def list_users_msg():

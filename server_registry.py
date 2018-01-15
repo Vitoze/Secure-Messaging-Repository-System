@@ -59,7 +59,7 @@ class ServerRegistry:
                         "Cannot load user description from " + path)
                     sys.exit(1)
 
-                self.users[uid] = UserDescription(uid, description)
+                self.users[uid] = UserDescription(uid , description)
 
     def saveOnFile(self, path, data):
         with open(path, "w") as f:
@@ -87,6 +87,34 @@ class ServerRegistry:
     def userExists(self, uid):
         return self.getUser(uid) is not None
 
+    def uuidExists(self, uuid):
+        for entryname in os.listdir(MBOXES_PATH):
+
+            if os.path.isdir(os.path.join(MBOXES_PATH, entryname)):
+                uid = 0
+                try:
+                    uid = int(entryname)
+                except:
+                    continue
+
+                path = os.path.join(MBOXES_PATH, entryname, DESC_FILENAME)
+
+                description = None
+                try:
+                    with open(path) as f:
+                        description = json.loads(f.read())
+                except:
+                    logging.exception(
+                        "Cannot load user description from " + path)
+                    sys.exit(1)
+                print "DESCRIPTION"
+                print description['uuid']
+                print "UUID"
+                print uuid
+                if description['uuid'] == uuid:
+                    return True
+        return False
+
     def getUser(self, uid):
         if isinstance(uid, int):
             if uid in self.users.keys():
@@ -101,6 +129,8 @@ class ServerRegistry:
 
     def addUser(self, description):
         uid = 1
+
+        #get last id created
         while self.userExists(uid):
             uid += 1
 

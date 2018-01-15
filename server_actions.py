@@ -67,15 +67,7 @@ class ServerActions:
             client.sendResult({"error": "wrong message format"})
             return
 
-        # Desencriptar conteudo uuid
-        #rsa = RSACipher(client.skey, None, None)
-        #print("\n\n\n\n")
-        #print(rsa.decrypt_skey(data['uuid']))
-        #print("\n\n\n\n")
-        
-        #uuid = int(rsa.decrypt_skey(data['uuid']))
-
-        uuid = base64.decodestring(data['uuid'])
+        #uuid = base64.decodestring(data['uuid'])
 
         '''
         if not isinstance(uuid, int):
@@ -84,15 +76,14 @@ class ServerActions:
             client.sendResult({"error": "wrong message format"})
             return
         '''
-        print type(uuid)
-        if self.registry.userExists(uuid):
+        print type(data['uuid'])
+        if self.registry.uuidExists(data['uuid']):
             log(logging.ERROR, "User already exists: " + json.dumps(data))
             client.sendResult({"error": "uuid already exists"})
             return
 
         me = self.registry.addUser(data)
 
-        #client.sendResult({"result": rsa.encrypt_skey(str(me.id))})
         client.sendResult({"result": me.id})
 
     def processList(self, data, client):
@@ -252,7 +243,7 @@ class ServerActions:
         log(logging.DEBUG, "%s" % json.dumps(data))
 
         #verificar se a mensagem esta no formato correto
-        if not set({'B', 'sign', 'cert', 'chain'}).issubset(set(data.keys())):
+        if not set({'B', 'sign', 'cert'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "wrong message format"})
