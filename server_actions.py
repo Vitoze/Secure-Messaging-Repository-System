@@ -8,6 +8,7 @@ import hashlib
 import M2Crypto
 from OpenSSL import crypto
 from certificates import *
+import datetime
 
 class ServerActions:
     def __init__(self):
@@ -243,7 +244,7 @@ class ServerActions:
         log(logging.DEBUG, "%s" % json.dumps(data))
 
         #verificar se a mensagem esta no formato correto
-        if not set({'B', 'sign', 'cert'}).issubset(set(data.keys())):
+        if not set({'B', 'sign', 'cert', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "wrong message format"})
@@ -277,7 +278,6 @@ class ServerActions:
                 json.dumps(data))
             client.sendResult({"error": "invalid signature"})
 
-
         # verify if certificate is valid
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
         chain = generateCertChain(certificate)
@@ -286,6 +286,15 @@ class ServerActions:
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "cannot validate cerfiticate with given certificate chain"})
+
+        # validate signature time
+        date1 = datetime.datetime.strptime(certificate.get_notAfter(), '%Y%m%d%H%M%SZ')
+        date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
+        date3 = datetime.datetime.strptime(certificate.get_notBefore(), '%Y%m%d%H%M%SZ')
+        if date1 <= date2:
+            print "Invalid signature time"
+        if date3 >= date2:
+            print "Invalid signature time"
 
         #verificar se B e um inteiro
         if isinstance(data['B'], int):

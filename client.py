@@ -16,6 +16,8 @@ import ast
 from smartcards import *
 from certificates import *
 from OpenSSL import crypto
+import pytz
+import datetime
 
 #variable initialization
 BUFSIZE = 512 * 1024
@@ -51,7 +53,7 @@ def connectToServer():
                 #verificar se a mensagem esta no formato correto
                 #if lst[3].startswith('"cert"'):
                     #if lst[4].startswith('"sign"'):
-                if set({'A', 'g', 'p'}).issubset(set(data.keys())):
+                if set({'A', 'g', 'p', 'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
                     #verificar se os conteudos dos campos sao int
                     if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
                         #verificar se os conteudos dos campos nao sao nulos
@@ -73,6 +75,21 @@ def connectToServer():
     if valid_sig != None:
         print "Invalid Signature"
 
+    #validate signature time
+    print type(c.get_notAfter())
+    print c.get_notAfter()
+    print type(data['datetime'])
+    print data['datetime']
+    date1 = datetime.datetime.strptime(c.get_notAfter(), '%Y%m%d%H%M%SZ')
+    date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
+    date3 = datetime.datetime.strptime(c.get_notBefore(), '%Y%m%d%H%M%SZ')
+    #print date1 <= date2
+
+    if date1 <= date2:
+        print "Invalid signature time"
+    if date3 >= date2:
+        print "Invalid signature time"
+
     #verify if certificate is valid
     chain = generateCertChain(c)
     valid_cert = verifyChain(chain, c)
@@ -89,6 +106,7 @@ def connectToServer():
 
     #Assinar B para enviar ao servidor
     sig = signWithCC(private_key, str(B))
+    dt = datetime.datetime.now()
     s = base64.encodestring(sig)
     print sig
     print len(s)
@@ -99,7 +117,7 @@ def connectToServer():
     #print pub_cert.as_pem()
 
     #Mensagem dh para enviar B ao server
-    msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s}
+    msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s, 'datetime': dt.isoformat()}
     #msg = {'type': 'dh', 'B': B, 'cert': pub_cert.as_pem, 'sign': s}
 
     #tmp = json.dumps(msg)

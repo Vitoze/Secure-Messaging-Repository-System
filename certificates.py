@@ -27,7 +27,7 @@ def generateCertChain(cert):
         print subject
         issuer = cert.get_issuer().__getattr__('CN')
         print issuer
-
+        #i=''
 
         if issuer == subject:
             break
@@ -53,6 +53,9 @@ def generateCertChain(cert):
             else:
                 print "Cannot load cert " + i
             cert = new_cert
+
+
+
     return store
 
 def find(name, path):
