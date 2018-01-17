@@ -22,6 +22,8 @@ from Crypto.PublicKey import RSA
 from certificates import *
 import M2Crypto
 from OpenSSL import crypto
+import datetime
+import pytz
 
 # Server address
 HOST = ""   # All available interfaces
@@ -89,13 +91,14 @@ class Server:
 
         #Assinar A
         signature = crypto.sign(self.privkey, str(A), "sha256")
+        dt = datetime.datetime.now()
         s = base64.encodestring(signature)
         print signature
         print len(s)
 
         #Enviar mensagem para o cliente com o A, g e p para o cliente poder calcular B e K
         #c.sendResult({'A' : A, 'g' : g, 'p' : c.p, 'sign' : signature, 'cert' : self.cert, 'chain' : self.chain})
-        m = {'A': A, 'g': g, 'p': c.p, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert), 'sign' : s}
+        m = {'type': 'dh', 'A': A, 'g': g, 'p': c.p, 'cert': crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert), 'sign': s, 'datetime': dt.isoformat()}
 
         c.sendResult(m)
 
