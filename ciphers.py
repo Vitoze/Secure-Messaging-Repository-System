@@ -12,25 +12,27 @@ unpad = lambda s : s[:-ord(s[len(s)-1:])]
 
 class AESCipher(object):
 	"""docstring for AESCipher"""
-	def __init__(self, key):
-		self.key = key
+	def __init__(self, key, cipher=None):
+		if cipher == None:
+			self.iv = Random.new().read(AES.block_size)
+			self.cipher = AES.new(key, AES.MODE_CBC, self.iv)
+		else:
+			self.cipher = cipher
 
 	def encrypt(self, raw):
 		raw = pad(raw)
-		iv = Random.new().read(AES.block_size)
-		cipher = AES.new(self.key, AES.MODE_CBC, iv)
-		return base64.b64encode(iv + cipher.encrypt(raw))
+		return base64.b64encode(self.iv + self.cipher.encrypt(raw))
 
 	def decrypt(self, enc):
 		enc = base64.b64decode(enc)
 		iv = enc[:16]
-		cipher = AES.new(self.key, AES.MODE_CBC, iv)
-		return unpad(cipher.decrypt(enc[16:]))
+		self.cipher = AES.new(self.key, AES.MODE_CBC, iv)
+		return unpad(self.cipher.decrypt(enc[16:]))
 
 
 class RSACipher(object):
-	def __init__(self, key, privkey, pubkey):
-		self.skey_cipher = AESCipher(hashlib.sha256(str(key)).digest())
+	def __init__(self, privkey, pubkey):
+		#self.skey_cipher = AESCipher(hashlib.sha256(str(key)).digest())
 		self.privkey = privkey
 		self.pubkey = pubkey
 
@@ -38,15 +40,15 @@ class RSACipher(object):
 		pubkey_obj = RSA.importKey(self.pubkey)
 		return base64.b64encode(pubkey_obj.encrypt(data, "")[0])
 
-	def encrypt_skey(self, data):
-		return self.skey_cipher.encrypt(data)
+	#def encrypt_skey(self, data):
+		#return self.skey_cipher.encrypt(data)
 
 	def decrypt_priv(self, data):
 		privkey_obj = RSA.importKey(self.privkey)
 		return privkey_obj.decrypt(base64.b64decode(data))
 
-	def decrypt_skey(self, data):
-		return self.skey_cipher.decrypt(data)
+	#def decrypt_skey(self, data):
+		#return self.skey_cipher.decrypt(data)
 
 	def create_asymmetric_key(self):
 		key = RSA.generate(1024, e=65537)

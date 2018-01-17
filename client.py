@@ -25,12 +25,10 @@ K = 0
 privkey = ''
 symkey = ''
 pubkey = ''
-skey = None
-aes = None
 rsa = None
 
 def connectToServer():
-    global client_socket, client_name, privkey, symkey, pubkey, K, skey
+    global client_socket, client_name, privkey, pubkey, K
     #client_name = raw_input('Please, insert your name: ')
     
     # Conection
@@ -112,13 +110,12 @@ def connectToServer():
 
     #Calcular K = A^b mod p 
     K = (data['A']**b)%data['p']
-    skey = RSACipher(K, None, None)
+    #skey = RSACipher(K, None, None)
 
     print '...Done'
     #print 'Welcome client',client_name,'!\n'
 
     create_directory()
-    read_keys()
     
 
 
@@ -169,7 +166,11 @@ def process(op):
 
 #Create user message box
 def create_user_message_box():
-    global aes, skey
+    global pubkey
+
+    read_keys()
+
+    public_key = base64.encodestring(pubkey)
 
     #uuid = '15'
     uuid = getUuid()
@@ -187,7 +188,7 @@ def create_user_message_box():
 
 
         #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
-        msg = {'type': 'create', 'uuid': uuid64}
+        msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
         #encrypted_m = skey.encrypt_skey(msg)
         #print encrypted_m
         client_socket.send(json.dumps(msg) + "\r\n")
@@ -200,25 +201,24 @@ def create_user_message_box():
         if data.keys()[0] == "error":
             print(data['error'])
         else:
-            cid = int(skey.decrypt_skey(data['result']))
+            cid = int(data['result'])
             print("Cliente Id: ", cid)
 
 
 #List users message boxes
 def list_users_msg():
-    global skey
 
     print("\n")
     
-    while r != 'Y' or r != 'y' or r != 'N' or r != 'n':
+    r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
+    while r != 'Y' and r != 'y' and r != 'N' and r != 'n':
+        print("Wrong answer!\n")
         r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
-        if r != 'Y' or r != 'y' or r != 'N' or r != 'n':
-            print("Wrong answer!\n")
 
     if r == 'Y' or r == 'y':
         nid = raw_input("Introduza o ID: ")
-        encrypted_nid = skey.encrypt_skey(str(nid))
-        list = {'type' : 'list', 'id' : encrypted_nid}
+        #encrypted_nid = skey.encrypt_skey(str(nid))
+        list = {'type' : 'list', 'id' : nid}
     else:
         list = {'type' : 'list'}
 
@@ -231,18 +231,18 @@ def list_users_msg():
     if lst.keys()[0] == "error":
         print(lst['error'])
     else:
-        lista = skey.decrypt_skey(lst['result'])
+        lista = lst['result']
         print("Lista: ", lista)
 
     main()
 
 #New messages
 def new_msg():
-    global cid, skey
+    global cid
 
-    encrypted_nid = skey.encrypted_nid(str(cid))
+    #encrypted_nid = skey.encrypt_skey(str(cid))
 
-    newmsg = {'type' : 'new', 'id' : encrypted_nid}
+    newmsg = {'type' : 'new', 'id' : cid}
     
     client_socket.send(json.dumps(newmsg) + "\r\n")
     newmsglst = client_socket.recv(BUFSIZE)
@@ -253,18 +253,18 @@ def new_msg():
     if newmsglst.keys()[0] == "error":
         print(newmsglst['error'])
     else:
-        newmsglist = skey.decrypt_skey(newmsglst['result'])
+        newmsglist = newmsglst['result']
         print("Lista: ", newmsglist)    
 
     main()
 
 #All new messages
 def new_all_msg():
-    global cid, skey
+    global cid
 
-    encrypted_nid = skey.encrypted_nid(str(cid))
+    #encrypted_nid = skey.encrypt_skey(str(cid))
 
-    allmsg = {'type' : 'all', 'id' : encrypted_nid}
+    allmsg = {'type' : 'all', 'id' : cid}
 
     client_socket.send(json.dumps(allmsg) + "\r\n")
     allmsglst = client_socket.recv(BUFSIZE)
@@ -275,14 +275,24 @@ def new_all_msg():
     if allmsglst.keys()[0] == "error":
         print(allmsglst['error'])
     else:
-        allmsglist = skey.decrypt_skey(allmsglst['result'])
+        allmsglist = allmsglst['result']
         print("Lista: ", allmsglist) 
 
     main()
 
 #Send message
 def send_msg():
-    sendmsg = {'type' : 'send', 'src' : '', 'dst' : '', 'msg' : json.dumps(''), 'copy' : json.dumps('')}
+    global cid, K
+
+    dstid = raw_input("Introduza o ID do destinatario ")
+    txt = raw_input("Mensagem: ")
+    
+    aes = AESCipher(K)
+    msg = aes.encrypt(txt)
+
+
+
+    sendmsg = {'type' : 'send', 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : ''}
     client_socket.send(json.dumps(sendmsg) + "\r\n")
     sendmsglst = client_socket.recv(BUFSIZE)
     print sendmsglst
@@ -340,37 +350,21 @@ def create_directory():
 
 
 def read_keys():
-    global privkey, pubkey, symkey, rsa, aes, k
+    global privkey, pubkey, rsa
 
     filename1 = directory + "/privkey.txt"
-    filename2 = directory + "/symkey.txt"
-
-    if os.path.exists(filename2):
-        try:
-            file = open(filename2, 'r+')
-            symkey = file.read()
-            aes = AESCipher(symkey)
-        except OSError as e:
-            log(logging.ERROR, str(e.errno))
-
-        file.close()
-    else:
-        secret = hashlib.sha256(str(K)).digest()
-        aes = AESCipher(secret)
-        symkey = secret
-        save_key(aes.key, filename2)
 
     if os.path.exists(filename1):
         try:
             file = open(filename1, 'r+')
             privkey = file.read()
-            rsa = RSACipher(aes.key, privkey, None)
+            rsa = RSACipher(privkey, None)
         except OSError as e:
             log(logging.ERROR, str(e.errno))
 
         file.close()
     else:
-        rsa = RSACipher(secret, None, None)
+        rsa = RSACipher(None, None)
         (privkey, pubkey) = rsa.create_asymmetric_key()
         rsa.privkey = privkey
         rsa.pubkey = pubkey
