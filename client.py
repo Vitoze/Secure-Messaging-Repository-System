@@ -26,12 +26,13 @@ global K
 K = 0
 privkey = ''
 symkey = ''
-pubkey = ''
-rsa = None
+global pubkey
+global rsa
+global users_list
 
 def connectToServer():
     global client_socket, client_name, privkey, pubkey, K
-    #client_name = raw_input('Please, insert your name: ')
+    client_name = raw_input('Please, insert your name: ')
     
     # Conection
     client_socket = socket(AF_INET, SOCK_STREAM)
@@ -167,12 +168,16 @@ def process(op):
         new_msg()
     elif op == '4':
         print 'Chosen 4 - List all messages received'
+        new_all_msg()
     elif op == '5':
         print 'Chosen 5 - Send message to a user'
+        send_msg()
     elif op == '6':
         print 'Chosen 6 - Receive a message from message box'
+        recv_msg_from_mb()
     elif op == '7':
         print 'Chosen 7 - List messages sent and their receipts'
+        send_receipt()
     elif op == '8':
         print 'Chosen 8 - Exit from aplication'
         exit()
@@ -187,8 +192,8 @@ def create_user_message_box():
     global pubkey
 
     read_keys()
-
     public_key = base64.encodestring(pubkey)
+
 
     #uuid = '15'
     uuid = getUuid()
@@ -204,7 +209,6 @@ def create_user_message_box():
         #encrypted_m = aes.encrypt(m)
         #write_msg(encrypted_m, "create")
 
-
         #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
         msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
         #encrypted_m = skey.encrypt_skey(msg)
@@ -213,19 +217,20 @@ def create_user_message_box():
         data = client_socket.recv(BUFSIZE)
 
         print("\n")
+        print(data)
 
-        data = ast.literal_eval(data)
+        res = ast.literal_eval(data)
 
-        if data.keys()[0] == "error":
-            print(data['error'])
+        if res.keys()[0] == "error":
+            print(res['error'])
         else:
-            cid = int(data['result'])
+            cid = int(res['result'])
             print("Cliente Id: ", cid)
 
 
 #List users message boxes
 def list_users_msg():
-
+    global users_list
     print("\n")
     
     r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
@@ -242,7 +247,6 @@ def list_users_msg():
 
     client_socket.send(json.dumps(list) + "\r\n")
     lst = client_socket.recv(BUFSIZE)
-    print lst
 
     lst = ast.literal_eval(lst)
 
@@ -252,6 +256,7 @@ def list_users_msg():
         lista = lst['result']
         print("Lista: ", lista)
 
+    users_list = lista[0]
     main()
 
 #New messages
@@ -302,15 +307,25 @@ def new_all_msg():
 def send_msg():
     global cid, K
 
+    print("\n")
+    print(K)
+
     dstid = raw_input("Introduza o ID do destinatario ")
     txt = raw_input("Mensagem: ")
     
     aes = AESCipher(K)
     msg = aes.encrypt(txt)
 
+    pubkey_dst = base64.decodestring(users_list[str(dstid)]['pubkey'])
+    dst_cipher = RSACipher(None, pubkey_dst)
 
+    msg_key = dst_cipher.encrypt_pub(aes.cipher)
 
-    sendmsg = {'type' : 'send', 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : ''}
+    aes_copy = AESCipher(K)
+    copy_msg = aes_copy.encrypt(txt)
+    copy_key = dst_cipher.encrypt_pub(aes_copy.cipher)
+
+    sendmsg = {'type' : 'send', 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : copy_msg, 'msgkey' : msg_key, 'copykey' : copy_key}
     client_socket.send(json.dumps(sendmsg) + "\r\n")
     sendmsglst = client_socket.recv(BUFSIZE)
     print sendmsglst

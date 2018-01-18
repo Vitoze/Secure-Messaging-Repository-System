@@ -12,7 +12,7 @@ unpad = lambda s : s[:-ord(s[len(s)-1:])]
 
 class AESCipher(object):
 	"""docstring for AESCipher"""
-	def __init__(self, key, cipher=None):
+	def __init__(self, key=None, cipher=None):
 		if cipher == None:
 			self.iv = Random.new().read(AES.block_size)
 			self.cipher = AES.new(key, AES.MODE_CBC, self.iv)
@@ -31,7 +31,7 @@ class AESCipher(object):
 
 
 class RSACipher(object):
-	def __init__(self, privkey, pubkey):
+	def __init__(self, privkey=None, pubkey=None):
 		#self.skey_cipher = AESCipher(hashlib.sha256(str(key)).digest())
 		self.privkey = privkey
 		self.pubkey = pubkey
