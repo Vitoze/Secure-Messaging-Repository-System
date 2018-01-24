@@ -51,7 +51,7 @@ class Server:
         self.clients = {}       # clients (key is socket)
 
         #load server private key
-        self.privkey = crypto.load_privatekey(crypto.FILETYPE_PEM, file('CCCerts/certs/Server_Certificate_KEY.pem').read())
+        self.privkey = crypto.load_privatekey(crypto.FILETYPE_PEM, file('CCCerts/Server_Certificate_KEY.pem').read())
         #load server public key certificate
         self.cert = crypto.load_certificate(crypto.FILETYPE_PEM, file('CCCerts/certs/Server Certificate.crt').read())
         #create server certificate chain

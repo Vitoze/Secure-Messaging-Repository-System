@@ -32,7 +32,7 @@ global users_list
 
 def connectToServer():
     global client_socket, client_name, privkey, pubkey, K
-    client_name = raw_input('Please, insert your name: ')
+    #client_name = raw_input('Please, insert your name: ')
     
     # Conection
     client_socket = socket(AF_INET, SOCK_STREAM)
@@ -112,9 +112,11 @@ def connectToServer():
 
     #get citizen signature public key certificate
     pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
+    print "Signature"
+    print pub_cert.as_der()
+    print pub_cert.as_pem()
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
-    #print pub_cert.as_pem()
-
+    print crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)
     #Mensagem dh para enviar B ao server
     msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s, 'datetime': dt.isoformat()}
     #msg = {'type': 'dh', 'B': B, 'cert': pub_cert.as_pem, 'sign': s}

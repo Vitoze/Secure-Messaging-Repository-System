@@ -8,6 +8,8 @@ from datetime import datetime
 import os
 import unicodedata
 
+CERT_PATH = 'CCCerts/certs/'
+CRL_PATH = 'CCCerts/crls/'
 
 def verifyChain(store, cert):
     ctx = crypto.X509StoreContext(store, cert)
@@ -22,39 +24,43 @@ def verifyChain(store, cert):
 def generateCertChain(cert):
     store = crypto.X509Store()
     while True:
-        print "Subject"
+        #print "Subject"
         subject = cert.get_subject().__getattr__('CN')
-        print subject
+        #print subject
         issuer = cert.get_issuer().__getattr__('CN')
-        print issuer
-        #i=''
-
+        #print issuer
+        new_cert = None
         if issuer == subject:
             break
+        elif issuer == 'Baltimore CyberTrust Root':
+            new_cert = crypto.load_certificate(crypto.FILETYPE_PEM,open('/etc/ssl/certs/Baltimore_CyberTrust_Root.pem').read())
         else:
-            new_cert = None
-            if issuer == 'Baltimore CyberTrust Root':
-                new_cert = crypto.load_certificate(crypto.FILETYPE_PEM, open('/etc/ssl/certs/Baltimore_CyberTrust_Root.pem').read())
-            else:
-                i = unicodedata.normalize('NFKD', issuer).encode('ASCII', 'ignore')
-                print i
-                if find(i + '.cer', 'CCCerts/certs/') is not None:
-                    new_cert = crypto.load_certificate(crypto.FILETYPE_ASN1, open('CCCerts/certs/' + i + '.cer').read())
-                if find(i + '.crt', 'CCCerts/certs/') is not None:
-                    file = open('CCCerts/certs/' + i + '.crt').read()
-                    if file.startswith('----'):
-                        new_cert = crypto.load_certificate(crypto.FILETYPE_PEM, file)
+            for entryname in os.listdir(CERT_PATH):
+                if os.path.isfile(os.path.join(CERT_PATH, entryname)):
+                    path = os.path.join(CERT_PATH, entryname)
+                    #print path
+                    fi=None
+                    try:
+                        with open(path) as f:
+                            fi = f.read()
+                    except:
+                        print ("Cannot load cert ", entryname)
+
+                    f_cert=None
+                    if fi.startswith('-----BEGIN CERTIFICATE-----'):
+                        f_cert = crypto.load_certificate(crypto.FILETYPE_PEM, fi)
                     else:
-                        new_cert = crypto.load_certificate(crypto.FILETYPE_ASN1, file)
-                if find(i + '.pem', 'CCCerts/certs/') is not None:
-                    new_cert = crypto.load_certificate(crypto.FILETYPE_PEM, open('CCCerts/certs/' + i + '.pem').read())
-            if new_cert != None:
-                store.add_cert(new_cert)
-            else:
-                print "Cannot load cert " + i
-            cert = new_cert
+                        f_cert = crypto.load_certificate(crypto.FILETYPE_ASN1, fi)
 
+                    if issuer == f_cert.get_subject().__getattr__('CN'):
+                        new_cert = f_cert
+                        break
 
+        if new_cert != None:
+            store.add_cert(new_cert)
+        else:
+            print "Cannot load cert " + new_cert
+        cert = new_cert
 
     return store
 
