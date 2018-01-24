@@ -12,22 +12,20 @@ unpad = lambda s : s[:-ord(s[len(s)-1:])]
 
 class AESCipher(object):
 	"""docstring for AESCipher"""
-	def __init__(self, key=None, cipher=None):
-		if cipher == None:
-			self.iv = Random.new().read(AES.block_size)
-			self.cipher = AES.new(key, AES.MODE_CBC, self.iv)
-		else:
-			self.cipher = cipher
+	def __init__(self, key):
+		self.key = hashlib.sha256(str(key)).digest()
 
 	def encrypt(self, raw):
 		raw = pad(raw)
-		return base64.b64encode(self.iv + self.cipher.encrypt(raw))
+		iv = Random.new().read(AES.block_size)
+		cipher = AES.new(self.key, AES.MODE_CBC, iv)
+		return base64.b64encode(iv + cipher.encrypt(raw))
 
 	def decrypt(self, enc):
 		enc = base64.b64decode(enc)
 		iv = enc[:16]
-		self.cipher = AES.new(self.key, AES.MODE_CBC, iv)
-		return unpad(self.cipher.decrypt(enc[16:]))
+		cipher = AES.new(self.key, AES.MODE_CBC, iv)
+		return unpad(cipher.decrypt(enc[16:]))
 
 
 class RSACipher(object):

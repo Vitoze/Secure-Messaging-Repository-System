@@ -115,6 +115,31 @@ class ServerRegistry:
                     return True
         return False
 
+    def getUserId(self, uuid):
+        for entryname in os.listdir(MBOXES_PATH):
+
+            if os.path.isdir(os.path.join(MBOXES_PATH, entryname)):
+                uid = 0
+                try:
+                    uid = int(entryname)
+                except:
+                    continue
+
+                path = os.path.join(MBOXES_PATH, entryname, DESC_FILENAME)
+
+                description = None
+                try:
+                    with open(path) as f:
+                        description = json.loads(f.read())
+                except:
+                    logging.exception(
+                        "Cannot load user description from " + path)
+                    sys.exit(1)
+
+                if description['uuid'] == uuid:
+                    return uid
+        return 0
+
     def getUser(self, uid):
         if isinstance(uid, int):
             if uid in self.users.keys():

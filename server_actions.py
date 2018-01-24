@@ -22,7 +22,8 @@ class ServerActions:
             'create': self.processCreate,
             'receipt': self.processReceipt,
             'status': self.processStatus,
-            'dh': self.processDH
+            'dh': self.processDH,
+            'request': self.processRequest
         }
 
         self.registry = ServerRegistry()
@@ -86,6 +87,7 @@ class ServerActions:
         me = self.registry.addUser(data)
 
         client.sendResult({"result": me.id})
+        client.id = me.id
 
     def processList(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -136,7 +138,7 @@ class ServerActions:
     def processSend(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
-        if not set(data.keys()).issuperset(set({'src', 'dst', 'msg', 'msg'})):
+        if not set(data.keys()).issuperset(set({'src', 'dst', 'msg', 'copy'})):
             log(logging.ERROR,
                 "Badly formated \"send\" message: " + json.dumps(data))
             client.sendResult({"error": "wrong message format"})
@@ -235,63 +237,95 @@ class ServerActions:
         log(logging.DEBUG, "%s" % json.dumps(data))
 
         #verificar se a mensagem esta no formato correto
-        if not set({'B', 'sign', 'cert', 'datetime'}).issubset(set(data.keys())):
+        if set({'B', 'sign', 'cert', 'datetime'}).issubset(set(data.keys())):
+            # verify if signature is valid
+            # data['cert'] value is a pem certificate
+            #print data['cert']
+            #print type(data['cert'])
+            #coiso = str(data['cert'])
+            #string = crypto.dump_certificate(crypto.FILETYPE_PEM, data['cert'])
+            print data['cert']
+            cert = M2Crypto.X509.load_cert_string(data['cert'])
+            #cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+            s = data['sign']
+            print s
+            print len(s)
+            sig = base64.decodestring(s)
+            '''
+            valid_sig = crypto.verify(cert, sig, str(data['B']), "sha256")
+            if valid_sig != None:
+                log(logging.ERROR, "Badly formated \"status\" message: " +
+                    json.dumps(data))
+                client.sendResult({"error": "invalid signature"})
+            '''
+
+            pub_key = cert.get_pubkey()
+            pub_key.verify_init()
+            pub_key.verify_update(str(data['B']))
+            valid_sig = pub_key.verify_final(sig)
+            if valid_sig != 1:
+                log(logging.ERROR, "Badly formated \"status\" message: " +
+                    json.dumps(data))
+                client.sendResult({"error": "invalid signature"})
+
+            # verify if certificate is valid
+            certificate = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+            chain = generateCertChain(certificate)
+            valid_cert = verifyChain(chain, certificate)
+            if valid_cert != None:
+                log(logging.ERROR, "Badly formated \"status\" message: " +
+                    json.dumps(data))
+                client.sendResult({"error": "cannot validate cerfiticate with given certificate chain"})
+
+            # validate signature time
+            date1 = datetime.datetime.strptime(certificate.get_notAfter(), '%Y%m%d%H%M%SZ')
+            date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
+            date3 = datetime.datetime.strptime(certificate.get_notBefore(), '%Y%m%d%H%M%SZ')
+            if date1 <= date2:
+                print "Invalid signature time"
+            if date3 >= date2:
+                print "Invalid signature time"
+
+            msg_ok = {'ok' : "not ok"}
+
+            #verificar se B e um inteiro
+            if isinstance(data['B'], int):
+                #verificar se B nao e nulo
+                if data['B'] != 0:
+                    try:
+                        #Calcular K = B^a mod p
+                        client.skey = (data['B']**client.a)%client.p
+                        msg_ok = {'ok' : "ok"}
+                    except:
+                        msg_ok = {'ok' : "not ok"}
+
+            client.sendResult(msg_ok)
+
+        elif set({'ok'}).issubset(set(data.keys())):
+            if data['ok'] == "ok":
+                logging.info("Session Key established")
+            else:
+                logging.info("Session Key not established") #fechar o socket do user
+        else:
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "wrong message format"})
 
-        # verify if signature is valid
-        # data['cert'] value is a pem certificate
-        #print data['cert']
-        #print type(data['cert'])
-        #coiso = str(data['cert'])
-        #string = crypto.dump_certificate(crypto.FILETYPE_PEM, data['cert'])
-        print data['cert']
-        cert = M2Crypto.X509.load_cert_string(data['cert'])
-        #cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
-        s = data['sign']
-        print s
-        print len(s)
-        sig = base64.decodestring(s)
-        '''
-        valid_sig = crypto.verify(cert, sig, str(data['B']), "sha256")
-        if valid_sig != None:
-            log(logging.ERROR, "Badly formated \"status\" message: " +
+    def processRequest(self, data, client):
+
+        log(logging.DEBUG, "%s" % json.dumps(data))
+
+        if 'uuid' not in data.keys():
+            log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
-            client.sendResult({"error": "invalid signature"})
-        '''
+            client.sendResult({"error": "wrong message format"})
+            return
 
-        pub_key = cert.get_pubkey()
-        pub_key.verify_init()
-        pub_key.verify_update(str(data['B']))
-        valid_sig = pub_key.verify_final(sig)
-        if valid_sig != 1:
-            log(logging.ERROR, "Badly formated \"status\" message: " +
-                json.dumps(data))
-            client.sendResult({"error": "invalid signature"})
+        if self.registry.uuidExists(data['uuid']):
+            client.id = self.registry.getUserId(data['uuid'])
 
-        # verify if certificate is valid
-        certificate = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
-        chain = generateCertChain(certificate)
-        valid_cert = verifyChain(chain, certificate)
-        if valid_cert != None:
-            log(logging.ERROR, "Badly formated \"status\" message: " +
-                json.dumps(data))
-            client.sendResult({"error": "cannot validate cerfiticate with given certificate chain"})
+        msg = {'id' : client.id}
 
-        # validate signature time
-        date1 = datetime.datetime.strptime(certificate.get_notAfter(), '%Y%m%d%H%M%SZ')
-        date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
-        date3 = datetime.datetime.strptime(certificate.get_notBefore(), '%Y%m%d%H%M%SZ')
-        if date1 <= date2:
-            print "Invalid signature time"
-        if date3 >= date2:
-            print "Invalid signature time"
+        client.sendResult(msg)
 
-        #verificar se B e um inteiro
-        if isinstance(data['B'], int):
-            #verificar se B nao e nulo
-            if data['B'] != 0:
-                #Calcular K = B^a mod p
-                client.skey = (data['B']**client.a)%client.p
-        logging.info("Session Key established")
+        
