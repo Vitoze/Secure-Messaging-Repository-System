@@ -280,12 +280,12 @@ class ServerActions:
             #print type(data['cert'])
             #coiso = str(data['cert'])
             #string = crypto.dump_certificate(crypto.FILETYPE_PEM, data['cert'])
-            print data['cert']
+            #print data['cert']
             cert = M2Crypto.X509.load_cert_string(data['cert'])
             #cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
             s = data['sign']
-            print s
-            print len(s)
+            #print s
+            #print len(s)
             sig = base64.decodestring(s)
             '''
             valid_sig = crypto.verify(cert, sig, str(data['B']), "sha256")

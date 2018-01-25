@@ -93,8 +93,8 @@ class Server:
         signature = crypto.sign(self.privkey, str(A), "sha256")
         dt = datetime.datetime.now()
         s = base64.encodestring(signature)
-        print signature
-        print len(s)
+        #print signature
+        #print len(s)
 
         #Enviar mensagem para o cliente com o A, g e p para o cliente poder calcular B e K
         #c.sendResult({'A' : A, 'g' : g, 'p' : c.p, 'sign' : signature, 'cert' : self.cert, 'chain' : self.chain})
@@ -155,7 +155,7 @@ class Server:
         data = None
         try:
             data = s.recv(BUFSIZE)
-            print "DATA!!!!" + data
+            #print "DATA!!!!" + data
             log(logging.DEBUG,
                 "Received data from %s. Message:\n%r" % (client, data))
         except:

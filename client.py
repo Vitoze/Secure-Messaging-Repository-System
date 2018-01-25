@@ -40,6 +40,7 @@ def connectToServer():
     print 'Stablishing a secure connection...'
 
     data = None
+    loadAllCrls()
     #waiting received A, g and p from server
     while True:
         rec = client_socket.recv(BUFSIZE)
@@ -66,18 +67,18 @@ def connectToServer():
     #cert = M2Crypto.X509.load_cert_string(lst[3][7:])
     c = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
     s = data['sign']
-    print s
-    print len(s)
+    #print s
+    #print len(s)
     sig = base64.decodestring(s)
     valid_sig = crypto.verify(c, sig, str(data['A']), "sha256")
     if valid_sig != None:
         print "Invalid Signature"
 
     #validate signature time
-    print type(c.get_notAfter())
-    print c.get_notAfter()
-    print type(data['datetime'])
-    print data['datetime']
+    #print type(c.get_notAfter())
+    #print c.get_notAfter()
+    #print type(data['datetime'])
+    #print data['datetime']
     date1 = datetime.datetime.strptime(c.get_notAfter(), '%Y%m%d%H%M%SZ')
     date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
     date3 = datetime.datetime.strptime(c.get_notBefore(), '%Y%m%d%H%M%SZ')
@@ -106,16 +107,16 @@ def connectToServer():
     sig = signWithCC(private_key, str(B))
     dt = datetime.datetime.now()
     s = base64.encodestring(sig)
-    print sig
-    print len(s)
+    #print sig
+    #print len(s)
 
     #get citizen signature public key certificate
     pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
-    print "Signature"
-    print pub_cert.as_der()
-    print pub_cert.as_pem()
+    #print "Signature"
+    #print pub_cert.as_der()
+    #print pub_cert.as_pem()
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
-    print crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)
+    #print crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)
     #Mensagem dh para enviar B ao server
     msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s, 'datetime': dt.isoformat()}
     #msg = {'type': 'dh', 'B': B, 'cert': pub_cert.as_pem, 'sign': s}
