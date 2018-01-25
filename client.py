@@ -24,8 +24,6 @@ BUFSIZE = 512 * 1024
 client_name = ''
 global K
 K = 0
-privkey = ''
-symkey = ''
 global pubkey
 global rsa
 global users_list
@@ -216,7 +214,9 @@ def process(op):
 
 #Request id
 def request_id():
-    global cid
+    global cid, rsa
+
+    read_keys()
 
     msg = {'type' : 'request', 'uuid' : base64.encodestring(getUuid())}
     client_socket.send(json.dumps(msg) + "\r\n")
@@ -242,7 +242,7 @@ def request_id():
 
 #Create user message box
 def create_user_message_box():
-    global pubkey
+    global pubkey, cid
 
     read_keys()
     public_key = base64.encodestring(pubkey)
@@ -339,7 +339,7 @@ def new_msg():
 
     newmsglst = ast.literal_eval(newmsglst)
 
-    if newmsglst.keys()[0] == "error":
+    if "error" in newmsglst.keys():
         print(newmsglst['error'])
     else:
         newmsglist = newmsglst['result']
@@ -357,15 +357,14 @@ def new_all_msg():
 
     client_socket.send(json.dumps(allmsg) + "\r\n")
     allmsglst = client_socket.recv(BUFSIZE)
-    print allmsglst
 
     allmsglst = ast.literal_eval(allmsglst)
 
-    if allmsglst.keys()[0] == "error":
-        print(allmsglst['error'])
+    if "error" in allmsglst.keys():
+        print "ERROR: ", allmsglst['error']
     else:
         allmsglist = allmsglst['result']
-        print("Lista: ", allmsglist) 
+        print "Lista: ", allmsglist 
 
     main()
 
@@ -396,13 +395,18 @@ def send_msg():
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
-    nid = 4
-    msg = ''
+    global cid, rsa
 
-    recvmsg = {'type' : 'recv', 'id' : nid, 'msg' : msg}
+    msgid = raw_input("\nIntroduza o ID da mensagem: ")
+
+    recvmsg = {'type' : 'recv', 'id' : cid, 'msg' : msgid}
     client_socket.send(json.dumps(recvmsg) + "\r\n")
     recvmsglst = client_socket.recv(BUFSIZE)
-    print recvmsglst
+
+    recv = ast.literal_eval(ast.literal_eval(recvmsglst)['result'][1])
+    msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
+    print "\nMensagem recebida: ", msgrecv
+
     main()
 
 
@@ -446,7 +450,7 @@ def create_directory():
 
 
 def read_keys():
-    global privkey, pubkey, rsa
+    global pubkey, rsa
 
     filename1 = directory + "/privkey.txt"
 

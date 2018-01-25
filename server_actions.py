@@ -117,6 +117,12 @@ class ServerActions:
             client.sendResult({"error": "wrong message format"})
             return
 
+        if not client.id == user:
+            log(logging.ERROR,
+                "Wrong client id for \"new\" message: " + json.dumps(data))
+            client.sendResult({"error": "wrong parameters"})
+            return
+
         client.sendResult(
             {"result":  self.registry.userNewMessages(user)})
 
@@ -133,20 +139,32 @@ class ServerActions:
             client.sendResult({"error": "wrong message format"})
             return
 
+        if not client.id == user:
+            log(logging.ERROR,
+                "Wrong client id for \"new\" message: " + json.dumps(data))
+            client.sendResult({"error": "wrong parameters"})
+            return
+
         client.sendResult({"result": [self.registry.userAllMessages(user), self.registry.userSentMessages(user)]})
 
     def processSend(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
-        if not set(data.keys()).issuperset(set({'src', 'dst', 'msg', 'copy'})):
+        if not set(data.keys()).issuperset(set({'src', 'dst', 'msg', 'copy', 'msgkey', 'copykey'})):
             log(logging.ERROR,
                 "Badly formated \"send\" message: " + json.dumps(data))
             client.sendResult({"error": "wrong message format"})
 
         srcId = int(data['src'])
         dstId = int(data['dst'])
-        msg = str(data['msg'])
-        copy = str(data['copy'])
+        msg = json.dumps({'msg' : data['msg'], 'msgkey' : data['msgkey']})
+        copy = json.dumps({'copy' : data['copy'], 'copykey' : data['copykey']})
+
+        if not client.id == srcId:
+            log(logging.ERROR,
+                "Wrong client id for \"send\" message: " + json.dumps(data))
+            client.sendResult({"error": "wrong parameters"})
+            return
 
         if not self.registry.userExists(srcId):
             log(logging.ERROR,
@@ -176,6 +194,12 @@ class ServerActions:
 
         fromId = int(data['id'])
         msg = str(data['msg'])
+
+        if not client.id == fromId:
+            log(logging.ERROR,
+                "Wrong client id for \"recv\" message: " + json.dumps(data))
+            client.sendResult({"error": "wrong parameters"})
+            return
 
         if not self.registry.userExists(fromId):
             log(logging.ERROR,
@@ -207,6 +231,12 @@ class ServerActions:
         msg = str(data['msg'])
         receipt = str(data['receipt'])
 
+        if not client.id == fromId:
+            log(logging.ERROR,
+                "Wrong client id for \"receipt\" message: " + json.dumps(data))
+            client.sendResult({"error": "wrong parameters"})
+            return
+
         if not self.registry.messageWasRed(str(fromId), msg):
             log(logging.ERROR, "Unknown, or not yet red, message for \"receipt\" request " + json.dumps(data))
             client.sendResult({"error": "wrong parameters"})
@@ -224,6 +254,12 @@ class ServerActions:
         
         fromId = int(data['id'])
         msg = str(data["msg"])
+
+        if not client.id == fromId:
+            log(logging.ERROR,
+                "Wrong client id for \"status\" message: " + json.dumps(data))
+            client.sendResult({"error": "wrong parameters"})
+            return
 
         if(not self.registry.copyExists(fromId, msg)):
             log(logging.ERROR, "Unknown message for \"status\" request: " + json.dumps(data))

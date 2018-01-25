@@ -12,8 +12,11 @@ unpad = lambda s : s[:-ord(s[len(s)-1:])]
 
 class AESCipher(object):
 	"""docstring for AESCipher"""
-	def __init__(self, key):
-		self.key = hashlib.sha256(str(key)).digest()
+	def __init__(self, k = None, key=None):
+		if key == None:
+			self.key = hashlib.sha256(str(key)).digest()
+		else:
+			self.key = key
 
 	def encrypt(self, raw):
 		raw = pad(raw)
@@ -50,9 +53,9 @@ class RSACipher(object):
 
 	def create_asymmetric_key(self):
 		key = RSA.generate(1024, e=65537)
-		pubkey = key.publickey().exportKey('PEM')
-		privkey = key.exportKey('PEM')
-		return privkey, pubkey
+		self.pubkey = key.publickey().exportKey('PEM')
+		self.privkey = key.exportKey('PEM')
+		return self.privkey, self.pubkey
 
 #x = 12
 #cipher = RSACipher(x)
