@@ -125,7 +125,7 @@ class ServerActions:
 
         user = -1
         if 'id' in data.keys():
-            user = int(skey.encrypt_skey(data['id']))
+            user = int(data['id'])
 
         if user < 0:
             log(logging.ERROR,

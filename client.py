@@ -44,25 +44,25 @@ def connectToServer():
     data = None
     #waiting received A, g and p from server
     while True:
-            rec = client_socket.recv(BUFSIZE)
-            if rec is not None:
-                #lst = rec.split(',')
-                #data_string = lst[0] + ',' + lst[1] + ',' + lst[2] + '}'
-                #print str
-                data = ast.literal_eval(rec)
-                #verificar se a mensagem esta no formato correto
-                #if lst[3].startswith('"cert"'):
-                    #if lst[4].startswith('"sign"'):
-                if set({'A', 'g', 'p', 'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
-                    #verificar se os conteudos dos campos sao int
-                    if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
-                        #verificar se os conteudos dos campos nao sao nulos
-                        if((data['A'] != 0) and (data['g'] != 0) and (data['p'] != 0)):
-                            break
-                else:
-                    log(logging.ERROR, "Badly formated \"status\" message: " +
-                        json.dumps(data))
-                    #client_socket.sendResult({"error": "wrong message format"})
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            #lst = rec.split(',')
+            #data_string = lst[0] + ',' + lst[1] + ',' + lst[2] + '}'
+            #print str
+            data = ast.literal_eval(rec)
+            #verificar se a mensagem esta no formato correto
+            #if lst[3].startswith('"cert"'):
+                #if lst[4].startswith('"sign"'):
+            if set({'A', 'g', 'p', 'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
+                #verificar se os conteudos dos campos sao int
+                if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
+                    #verificar se os conteudos dos campos nao sao nulos
+                    if((data['A'] != 0) and (data['g'] != 0) and (data['p'] != 0)):
+                        break
+            else:
+                log(logging.ERROR, "Badly formated \"status\" message: " +
+                    json.dumps(data))
+                #client_socket.sendResult({"error": "wrong message format"})
 
     #verify if signature is valid
     #cert = M2Crypto.X509.load_cert_string(lst[3][7:])
@@ -285,6 +285,7 @@ def create_user_message_box():
 def list_users_msg():
     global users_list, cid, pubkey
     print("\n")
+    nid = 0
     
     r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
     while r != 'Y' and r != 'y' and r != 'N' and r != 'n':
@@ -308,10 +309,20 @@ def list_users_msg():
     else:
         lista = lst['result']
 
-    for coiso in lista:
-        users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+    if nid == 0:
+        users_list = {}
+        for coiso in lista:
+            users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+    else:
+        for coiso in lista:
+            users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
 
-    pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
+    if set(users_list.keys()).issuperset(set({str(cid)})):
+        if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
+            pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
+            print "\n"
+            print pubkey
+            print "\n"
     main()
 
 #New messages
@@ -332,7 +343,7 @@ def new_msg():
         print(newmsglst['error'])
     else:
         newmsglist = newmsglst['result']
-        print("Lista: ", newmsglist)    
+        print "Lista: ", newmsglist    
 
     main()
 
