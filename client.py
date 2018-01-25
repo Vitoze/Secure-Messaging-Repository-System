@@ -23,9 +23,13 @@ import datetime
 BUFSIZE = 512 * 1024
 client_name = ''
 global K
-K = 0
+K = -1
 global pubkey
+pubkey = None
 global rsa
+rsa = None
+global cid
+cid = -1
 global users_list
 users_list = {}
 
@@ -217,7 +221,12 @@ def process(op):
 def request_id():
     global cid, rsa
 
-    read_keys()
+    if not cid == -1:
+        print "Your ID is: ", cid
+        main()
+
+    if rsa == None:
+        read_keys()
 
     msg = {'type' : 'request', 'uuid' : base64.encodestring(getUuid())}
     client_socket.send(json.dumps(msg) + "\r\n")
@@ -277,7 +286,7 @@ def create_user_message_box():
             print res['error']
         else:
             cid = int(res['result'])
-            print "Cliente Id: ", cid
+            print "Client ID: ", cid
 
     main()
 
@@ -285,16 +294,19 @@ def create_user_message_box():
 #List users message boxes
 def list_users_msg():
     global users_list, cid, pubkey
-    print("\n")
     nid = 0
     
-    r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
+    if cid == -1:
+        print "\nWrong Client ID! Please, create a message or resquest id!"
+        main()
+
+    r = raw_input("Would you like to insert a specific ID?(Y/N): ")
     while r != 'Y' and r != 'y' and r != 'N' and r != 'n':
         print("Wrong answer!\n")
-        r = raw_input("Deseja introduzir um ID especifico?(Y/N): ")
+        r = raw_input("Would you like to insert a specific ID?(Y/N): ")
 
     if r == 'Y' or r == 'y':
-        nid = raw_input("Introduza o ID: ")
+        nid = raw_input("Insert ID: ")
         #encrypted_nid = skey.encrypt_skey(str(nid))
         list = {'type' : 'list', 'id' : nid}
     else:
@@ -330,7 +342,9 @@ def list_users_msg():
 def new_msg():
     global cid
 
-    #encrypted_nid = skey.encrypt_skey(str(cid))
+    if cid == -1:
+        print "\nWrong client ID! Please, create a message or resquest id!"
+        main()
 
     newmsg = {'type' : 'new', 'id' : cid}
     
@@ -344,7 +358,7 @@ def new_msg():
         print(newmsglst['error'])
     else:
         newmsglist = newmsglst['result']
-        print "Lista: ", newmsglist    
+        print "List: ", newmsglist    
 
     main()
 
@@ -352,7 +366,9 @@ def new_msg():
 def new_all_msg():
     global cid
 
-    #encrypted_nid = skey.encrypt_skey(str(cid))
+    if cid == -1:
+        print "\nWrong client ID! Please, create a message or resquest id!"
+        main()
 
     allmsg = {'type' : 'all', 'id' : cid}
 
@@ -365,7 +381,7 @@ def new_all_msg():
         print "ERROR: ", allmsglst['error']
     else:
         allmsglist = allmsglst['result']
-        print "Lista: ", allmsglist 
+        print "All messages: ", allmsglist 
 
     main()
 
@@ -373,8 +389,16 @@ def new_all_msg():
 def send_msg():
     global cid, K, users_list
 
-    dstid = raw_input("Introduza o ID do destinatario ")
-    txt = raw_input("Mensagem: ")
+    if K == -1:
+        print "\nWrong Session Key! Please, try a new connection!"
+        main()
+
+    if cid == -1:
+        print "\nWrong Client ID! Please, create a message or resquest id!"
+        main()
+
+    dstid = raw_input("\nInsert destination ID: ")
+    txt = raw_input("Message: ")
     
     aes = AESCipher(K)
     msg = aes.encrypt(txt)
@@ -398,7 +422,14 @@ def send_msg():
 def recv_msg_from_mb():
     global cid, rsa
 
-    msgid = raw_input("\nIntroduza o ID da mensagem: ")
+    if cid == -1:
+        print "\nWrong Client ID! Please, create a message or resquest id!"
+        main()
+
+    if rsa == None:
+        read_keys()
+
+    msgid = raw_input("\nInsert message ID: ")
 
     recvmsg = {'type' : 'recv', 'id' : cid, 'msg' : msgid}
     client_socket.send(json.dumps(recvmsg) + "\r\n")
@@ -406,7 +437,7 @@ def recv_msg_from_mb():
 
     recv = ast.literal_eval(ast.literal_eval(recvmsglst)['result'][1])
     msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
-    print "\nMensagem recebida: ", msgrecv
+    print "\nMessage received: ", msgrecv
 
     main()
 
