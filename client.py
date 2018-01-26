@@ -207,8 +207,8 @@ def process(op):
         print 'Chosen 7 - Receive a message from message box'
         recv_msg_from_mb()
     elif op == '8':
-        print 'Chosen 8 - List messages sent and their receipts'
-        send_receipt()
+        print 'Chosen 8 - List message sent and their receipts'
+        status()
     elif op == '9':
         print 'Chosen 9 - Exit from aplication'
         exit()
@@ -398,6 +398,7 @@ def send_msg():
         main()
 
     dstid = raw_input("\nInsert destination ID: ")
+    # verificar dstid != cid e dstid exists
     txt = raw_input("Message: ")
     
     aes = AESCipher(K)
@@ -415,7 +416,17 @@ def send_msg():
     sendmsg = {'type' : 'send', 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : copy_msg, 'msgkey' : msg_key, 'copykey' : copy_key}
     client_socket.send(json.dumps(sendmsg) + "\r\n")
     sendmsglst = client_socket.recv(BUFSIZE)
+    
     print sendmsglst
+
+    sendmsglst = ast.literal_eval(sendmsglst)
+    if "error" in sendmsglst.keys():
+        print "\nERROR: ", sendmsglst['error']
+    else:
+        print "\nSent message successfully!"
+        print "Message ID: ",sendmsglst['result'][0]
+        print "Receipt ID: ",sendmsglst['result'][1]
+
     main()
 
 #Receive nessage from a user message box
@@ -431,38 +442,68 @@ def recv_msg_from_mb():
 
     msgid = raw_input("\nInsert message ID: ")
 
+    #verificar msgid format
+    #verificar se msgid esta na lista mbox
+
     recvmsg = {'type' : 'recv', 'id' : cid, 'msg' : msgid}
     client_socket.send(json.dumps(recvmsg) + "\r\n")
     recvmsglst = client_socket.recv(BUFSIZE)
 
-    recv = ast.literal_eval(ast.literal_eval(recvmsglst)['result'][1])
-    msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
-    print "\nMessage received: ", msgrecv
+    print recvmsglst
+
+    if "error" in ast.literal_eval(recvmsglst).keys():
+        print "\nERROR: ", ast.literal_eval(recvmsglst)['error']
+    else:
+        recv = ast.literal_eval(ast.literal_eval(recvmsglst)['result'][1])
+        msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
+        print "\nMessage received: ", msgrecv
+        # send receipt
+        send_receipt(recvmsglst, msgid)
 
     main()
 
 
 #Send receipt for a message
-def send_receipt():
-    nid = 4
-    msg = ''
-    receipt = ''
+def send_receipt(res, msgid):
+    global cid
+    
+    if cid == -1:
+        print "\nWrong Client ID! Please, create a message or request id!"
+        main()
 
-    receiptmsg = {'type' : 'receipt', 'id' : nid, 'msg' : msg, 'receipt' : receipt}
+    #get signature private key from CC
+    private_key = getCCPrivKey("CITIZEN SIGNATURE KEY")
+
+    # sign 
+    sig = signWithCC(private_key, res)
+    dt = datetime.datetime.now()
+    s = base64.encodestring(sig)
+
+    #get citizen signature public key certificate
+    pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
+    signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
+
+    receiptmsg = {'type' : 'receipt', 'id' : cid, 'msg' : msgid, 'receipt' : s, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
     client_socket.send(json.dumps(receiptmsg) + "\r\n")
-    receiptmsglst = client_socket.recv(BUFSIZE)
-    print receiptmsglst
-    main()
+
+    print "\nReceipt sent successfully!"
 
 #Status
 def status():
-    nid = 4
-    msg = ''
+    global cid
 
-    statmsg = {'type' : 'status', 'id' : nid, 'msg' : msg}
+    if cid == -1:
+        print "\nWrong Client ID! Please, create a message or resquest id!"
+        main()
+
+    msgid = raw_input("\nInsert message ID: ")
+
+    statmsg = {'type' : 'status', 'id' : cid, 'msg' : msgid}
     client_socket.send(json.dumps(statmsg) + "\r\n")
     statmsglst = client_socket.recv(BUFSIZE)
     print statmsglst
+
+    # verificar se msgid é igualáo id no result
     main()
 
 def exit():

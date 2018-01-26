@@ -217,12 +217,12 @@ class ServerActions:
 
         response = self.registry.recvMessage(fromId, msg)
 
-        client.sendResult({"result": response})
+        client.sendResult({"result": response, "time" : datetime.datetime.now().isoformat()})
 
     def processReceipt(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
-        if not set({'id', 'msg', 'receipt'}).issubset(set(data.keys())):
+        if not set({'id', 'msg', 'receipt', 'cert', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"receipt\" message: " +
                 json.dumps(data))
             client.sendResult({"error": "wrong request format"})
