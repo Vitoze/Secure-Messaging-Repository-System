@@ -13,6 +13,39 @@ CRL_PATH = 'CCCerts/crls/'
 
 revoked_serialN = []
 
+def validateCertificate(cert):
+    #generate store
+    chain = generateCertChain(cert)
+    #check if store is valid
+    if verifyChain(chain, cert) == None:
+        # check if certificate is not revoked
+        (check, crl) = isRevoked(cert)
+        if check:
+            (is_valid, str)= validateCrl(crl)
+            if not is_valid :
+                return (False, "CRL is not valid")
+
+        #check if certificates from store are not revoked
+        while cert.get_subject().__getattr__('CN') != cert.get_issuer().__getattr__('CN'):
+            issuer = cert.get_issuer().__getattr__('CN')
+            issuer_cert = getCertificateFromName(issuer)
+
+            (isvalid, str) = validateCertificate(issuer_cert)
+            if not isvalid:
+                return (False, "CRL is not valid")
+            else:
+                cert = issuer_cert
+
+        if cert.get_subject().__getattr__('CN') == cert.get_issuer().__getattr__('CN'):
+            (check, crl) = isRevoked(cert)
+            if check:
+                (is_valid, str) = validateCrl(crl)
+                if not is_valid:
+                    return (False, "CRL is not valid")
+        return (True, "Certificate is valid")
+    else:
+        return (False, "Chain of trust verification failed")
+
 def verifyChain(store, cert):
     ctx = crypto.X509StoreContext(store, cert)
     result = None
@@ -39,11 +72,7 @@ def generateCertChain(cert):
         else:
             new_cert = getCertificateFromName(issuer)
         if new_cert != None:
-            if isRevoked(cert):
-                print("%s is revoked", new_cert.get_subject().__getattr__('CN'))
-                return None
-            else:
-                store.add_cert(new_cert)
+            store.add_cert(new_cert)
         else:
             print "Cannot load cert " + new_cert
         cert = new_cert
@@ -59,6 +88,8 @@ def find(name, path):
 '''
 
 #Load all CRLs from CRL_PATH directory and returns a list with all the serial numbers from the revoked certificates
+
+'''
 def loadAllCrls():
     for entryname in os.listdir(CRL_PATH):
         if os.path.isfile(os.path.join(CRL_PATH, entryname)):
@@ -69,21 +100,37 @@ def loadAllCrls():
                 revoked_certificates = crl.get_revoked()
                 for r in revoked_certificates:
                     revoked_serialN.append(r)
-
+'''
+'''
 def isRevoked(cert):
     serialN = cert.get_serial_number()
     for l in revoked_serialN:
         if serialN == l:
             return True
     return False
-
 '''
+
+def isRevoked(cert):
+    serialN = cert.get_serial_number()
+    for entryname in os.listdir(CRL_PATH):
+        if os.path.isfile(os.path.join(CRL_PATH, entryname)):
+            crl = crypto.load_crl(crypto.FILETYPE_ASN1, open(os.path.join(CRL_PATH, entryname)).read())
+            #print os.path.join(CRL_PATH, entryname)
+            revoked_certificates = crl.get_revoked()
+            for r in revoked_certificates:
+                if serialN == r:
+                    return (True, entryname)
+                else:
+                    return (False, None)
+
+
+
 def validateCrl(crl):
     i = crl.get_issuer().__getattr__('CN')
     crl_issuer = getCertificateFromName(i)
     chain = generateCertChain(crl_issuer)
     return verifyChain(chain, crl_issuer)
-'''
+
 
 def getCertificateFromName(name):
     cert = None

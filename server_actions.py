@@ -81,7 +81,7 @@ class ServerActions:
 
                 #check if hmac is correct
                 h = hmac.new(hashlib.sha256(str(client.skey)).digest(), '', hashlib.sha1)
-                h.update(info)
+                h.update(req['payload'])
 
                 d = base64.decodestring(req['hmac'])
                 print "req['payload']"
@@ -99,7 +99,7 @@ class ServerActions:
                 print d == h.hexdigest()
                 print hmac.compare_digest(d, h.hexdigest())
 
-                if hmac.compare_digest(base64.decodestring(req['hmac']), str(h)):
+                if hmac.compare_digest(base64.decodestring(req['hmac']), h.hexdigest()):
                     # process message
                     if data['type'] in self.messageTypes:
                         self.messageTypes[data['type']](data, client)
@@ -115,7 +115,6 @@ class ServerActions:
                     log(logging.ERROR, "Invalid field type from client")
                     return
                 '''
-
         except Exception, e:
             logging.exception("Could not handle request")
 
