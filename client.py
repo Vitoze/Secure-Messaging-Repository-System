@@ -18,6 +18,7 @@ from certificates import *
 from OpenSSL import crypto
 import pytz
 import datetime
+import re
 
 #variable initialization
 BUFSIZE = 512 * 1024
@@ -25,13 +26,14 @@ client_name = ''
 global K
 K = -1
 global pubkey
-pubkey = None
 global rsa
 rsa = None
 global cid
 cid = -1
 global users_list
 users_list = {}
+global allmsglist
+allmsglist = []
 
 def connectToServer():
     global client_socket, client_name, privkey, pubkey, K
@@ -201,7 +203,7 @@ def process(op):
         print 'Chosen 5 - List all messages received'
         new_all_msg()
     elif op == '6':
-        print 'Chosen  - Send message to a user'
+        print 'Chosen 6 - Send message to a user'
         send_msg()
     elif op == '7':
         print 'Chosen 7 - Receive a message from message box'
@@ -267,15 +269,9 @@ def create_user_message_box():
     '''
     if uuid is not None:
 
-        #m = "{'type' : 'create', 'uuid' : %s, }" % (uuid)
-
-        #encrypted_m = aes.encrypt(m)
-        #write_msg(encrypted_m, "create")
-
         #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
         msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
-        #encrypted_m = skey.encrypt_skey(msg)
-        #print encrypted_m
+
         client_socket.send(json.dumps(msg) + "\r\n")
         data = client_socket.recv(BUFSIZE)
 
@@ -307,7 +303,6 @@ def list_users_msg():
 
     if r == 'Y' or r == 'y':
         nid = raw_input("Insert ID: ")
-        #encrypted_nid = skey.encrypt_skey(str(nid))
         list = {'type' : 'list', 'id' : nid}
     else:
         list = {'type' : 'list'}
@@ -329,6 +324,8 @@ def list_users_msg():
     else:
         for coiso in lista:
             users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
+
+    print users_list
 
     if set(users_list.keys()).issuperset(set({str(cid)})):
         if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
@@ -364,7 +361,7 @@ def new_msg():
 
 #All new messages
 def new_all_msg():
-    global cid
+    global cid, allmsglist
 
     if cid == -1:
         print "\nWrong client ID! Please, create a message or resquest id!"
@@ -397,8 +394,23 @@ def send_msg():
         print "\nWrong Client ID! Please, create a message or resquest id!"
         main()
 
-    dstid = raw_input("\nInsert destination ID: ")
-    # verificar dstid != cid e dstid exists
+    if users_list == {}:
+        print "\nPlease, choose first \"3 - List users messages boxes\""
+        main()
+
+    flag = False
+    while flag == False:
+
+        dstid = raw_input("\nInsert destination ID: ")
+        
+        if set(users_list.keys()).issuperset(set({str(dstid)})):
+            if cid != int(dstid):
+                flag = True
+            else:
+                print "\nWrong destination ID! Your destination ID is equals to client ID"
+        else:
+            print "\nWrong destination ID!"
+
     txt = raw_input("Message: ")
     
     aes = AESCipher(K)
@@ -431,7 +443,7 @@ def send_msg():
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
-    global cid, rsa
+    global cid, rsa, allmsglist
 
     if cid == -1:
         print "\nWrong Client ID! Please, create a message or resquest id!"
@@ -440,10 +452,24 @@ def recv_msg_from_mb():
     if rsa == None:
         read_keys()
 
-    msgid = raw_input("\nInsert message ID: ")
+    if allmsglist == []:
+        print "\nPlease, choose first \"5 - List all messages received\""
+        main()
 
-    #verificar msgid format
-    #verificar se msgid esta na lista mbox
+    while True:
+        msgid = raw_input("\nInsert message ID: ")
+        
+        pattern = "_?[0-9]+_[0-9]+"
+        matches = re.match(pattern, msgid)
+        
+        if not matches:
+            print "\nWrong format message ID!"
+            print "Format: \"_Number_Number\" or \"Number_Number\""
+        elif not msgid in allmsglist[0]:
+            print "\nWrong message ID! Message not exists!"
+            print "Available messages: ", allmsglist[0]
+        else:
+            break
 
     recvmsg = {'type' : 'recv', 'id' : cid, 'msg' : msgid}
     client_socket.send(json.dumps(recvmsg) + "\r\n")
@@ -496,14 +522,34 @@ def status():
         print "\nWrong Client ID! Please, create a message or resquest id!"
         main()
 
-    msgid = raw_input("\nInsert message ID: ")
+    if allmsglist == []:
+        print "\nPlease, choose first \"5 - List all messages received\""
+        main()
+
+    while True:
+        msgid = raw_input("\nInsert message ID: ")
+        
+        pattern = "[0-9]+_[0-9]+"
+        matches = re.match(pattern, msgid)
+        
+        if not matches:
+            print "\nWrong format message ID!"
+            print "Format: \"Number_Number\""
+        elif not msgid in allmsglist[1]:
+            print "\nWrong message ID! Message not exists!"
+            print "Available messages: ", allmsglist[1]
+        else:
+            break
 
     statmsg = {'type' : 'status', 'id' : cid, 'msg' : msgid}
     client_socket.send(json.dumps(statmsg) + "\r\n")
     statmsglst = client_socket.recv(BUFSIZE)
     print statmsglst
 
-    # verificar se msgid é igualáo id no result
+    for i in ast.literal_eval(statmsglst)['result']['receipts']:
+        if i['id'] == msgid[0]:
+            print i['id'] # e agora??????????????????
+
     main()
 
 def exit():
