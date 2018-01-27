@@ -18,7 +18,12 @@ from certificates import *
 from OpenSSL import crypto
 import pytz
 import datetime
+
 import re
+
+import hmac
+import base64
+
 
 #variable initialization
 BUFSIZE = 512 * 1024
@@ -45,19 +50,17 @@ def connectToServer():
     client_socket.connect(('127.0.0.1', 8080))
     print 'Stablishing a secure connection...'
 
+    print 'Stablishing session key...'
     data = None
-    loadAllCrls()
+
     #waiting received A, g and p from server
     while True:
         rec = client_socket.recv(BUFSIZE)
+        #se recebeu alguma coisa no socket
         if rec is not None:
-            #lst = rec.split(',')
-            #data_string = lst[0] + ',' + lst[1] + ',' + lst[2] + '}'
-            #print str
             data = ast.literal_eval(rec)
+            print "Received from server message %s" % data
             #verificar se a mensagem esta no formato correto
-            #if lst[3].startswith('"cert"'):
-                #if lst[4].startswith('"sign"'):
             if set({'A', 'g', 'p', 'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
                 #verificar se os conteudos dos campos sao int
                 if(isinstance(data['A'], int) and (isinstance(data['g'], int)) and (isinstance(data['p'], int))):
@@ -70,36 +73,40 @@ def connectToServer():
                 #client_socket.sendResult({"error": "wrong message format"})
 
     #verify if signature is valid
-    #cert = M2Crypto.X509.load_cert_string(lst[3][7:])
+    print "Validations: \n"
+    print " - Validating signature"
     c = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
     s = data['sign']
-    #print s
-    #print len(s)
     sig = base64.decodestring(s)
     valid_sig = crypto.verify(c, sig, str(data['A']), "sha256")
     if valid_sig != None:
         print "Invalid Signature"
+        #do something
 
     #validate signature time
-    #print type(c.get_notAfter())
-    #print c.get_notAfter()
-    #print type(data['datetime'])
-    #print data['datetime']
+    print " - Validating signature time"
     date1 = datetime.datetime.strptime(c.get_notAfter(), '%Y%m%d%H%M%SZ')
     date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
     date3 = datetime.datetime.strptime(c.get_notBefore(), '%Y%m%d%H%M%SZ')
-    #print date1 <= date2
 
     if date1 <= date2:
         print "Invalid signature time"
+        #do something
     if date3 >= date2:
         print "Invalid signature time"
+        #do something
 
     #verify if certificate is valid
-    chain = generateCertChain(c)
-    valid_cert = verifyChain(chain, c)
-    if valid_cert != None:
-        print "Cannot validate certificate with given chain"
+    print " - Validating certificate and certificate chain"
+    (is_valid, motive) = validateCertificate(c)
+    #chain = generateCertChain(c)
+    #valid_cert = verifyChain(chain, c)
+    #if valid_cert != None:
+    #    print "Certificate is not valid"
+        #do something
+    if not is_valid:
+        print "Certificate is not valid"
+        # do something
 
 
     #Calcular B = g^b mod p
@@ -110,39 +117,31 @@ def connectToServer():
     private_key = getCCPrivKey("CITIZEN SIGNATURE KEY")
 
     #Assinar B para enviar ao servidor
+    print "Signing answer to server..."
     sig = signWithCC(private_key, str(B))
     dt = datetime.datetime.now()
     s = base64.encodestring(sig)
-    #print sig
-    #print len(s)
 
     #get citizen signature public key certificate
     pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
-    #print "Signature"
-    #print pub_cert.as_der()
-    #print pub_cert.as_pem()
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
-    #print crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)
+
     #Mensagem dh para enviar B ao server
     msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s, 'datetime': dt.isoformat()}
-    #msg = {'type': 'dh', 'B': B, 'cert': pub_cert.as_pem, 'sign': s}
 
-    #tmp = json.dumps(msg)
-
-    # print tmp
-
-    #tmp2 = tmp[:len(tmp) - 1]
-    #tmp3 = tmp2 + ',"cert":' + crypto.dump_certificate(crypto.FILETYPE_PEM, signCert) + ',"sign":' + s + "}"
+    print "Sending message to server: %s" % msg
     client_socket.send(json.dumps(msg) + "\r\n")
 
     #Calcular K = A^b mod p 
     K = (data['A']**b)%data['p']
     #skey = RSACipher(K, None, None)
 
+    #espera confirmacao do servidor
     while True:
         rec = client_socket.recv(BUFSIZE)
         if rec is not None:
             data = ast.literal_eval(rec)
+            print "Received from server message %s" % data
             if set({'ok'}).issubset(set(data.keys())):
                 #verificar se os conteudos dos campos sao str
                 if(isinstance(data['ok'], str)):
@@ -159,13 +158,10 @@ def connectToServer():
     msg = {'type' : 'dh','ok' : "ok"}
     client_socket.send(json.dumps(msg) + "\r\n")
 
-
     print '...Done'
     print 'Welcome client',client_name,'!\n'
 
     create_directory()
-    
-
 
 def main():
     printMenu()
@@ -221,7 +217,7 @@ def process(op):
 
 #Request id
 def request_id():
-    global cid, rsa
+    global cid, rsa, K
 
     if not cid == -1:
         print "Your ID is: ", cid
@@ -231,15 +227,18 @@ def request_id():
         read_keys()
 
     msg = {'type' : 'request', 'uuid' : base64.encodestring(getUuid())}
-    client_socket.send(json.dumps(msg) + "\r\n")
+
+    msg_mac = encapsulate_msg(msg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
 
     while True:
         rec = client_socket.recv(BUFSIZE)
         if rec is not None:
-            data = ast.literal_eval(rec)
+            data = json.loads(rec)
+            #print "Received from server message %s" % data
             if not set({'id'}).issubset(set(data.keys())):
-                log(logging.ERROR, "Badly formated \"status\" message: " +
-                    json.dumps(data))
+                print ("Message sent was not correct!")
             else:
                 break
 
@@ -269,10 +268,18 @@ def create_user_message_box():
     '''
     if uuid is not None:
 
+
         #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
         msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
 
         client_socket.send(json.dumps(msg) + "\r\n")
+
+        msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
+
+        msg_mac = encapsulate_msg(msg)
+
+        client_socket.send(json.dumps(msg_mac) + "\r\n")
+
         data = client_socket.recv(BUFSIZE)
 
         res = ast.literal_eval(data)
@@ -307,7 +314,9 @@ def list_users_msg():
     else:
         list = {'type' : 'list'}
 
-    client_socket.send(json.dumps(list) + "\r\n")
+    msg_mac = encapsulate_msg(list)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
     lst = client_socket.recv(BUFSIZE)
 
     lst = ast.literal_eval(lst)
@@ -344,8 +353,10 @@ def new_msg():
         main()
 
     newmsg = {'type' : 'new', 'id' : cid}
-    
-    client_socket.send(json.dumps(newmsg) + "\r\n")
+
+    msg_mac = encapsulate_msg(newmsg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
     newmsglst = client_socket.recv(BUFSIZE)
     print newmsglst
 
@@ -369,7 +380,9 @@ def new_all_msg():
 
     allmsg = {'type' : 'all', 'id' : cid}
 
-    client_socket.send(json.dumps(allmsg) + "\r\n")
+    msg_mac = encapsulate_msg(allmsg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
     allmsglst = client_socket.recv(BUFSIZE)
 
     allmsglst = ast.literal_eval(allmsglst)
@@ -426,7 +439,10 @@ def send_msg():
     copy_key = dst_cipher.encrypt_pub(aes_copy.key)
 
     sendmsg = {'type' : 'send', 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : copy_msg, 'msgkey' : msg_key, 'copykey' : copy_key}
-    client_socket.send(json.dumps(sendmsg) + "\r\n")
+
+    msg_mac = encapsulate_msg(sendmsg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
     sendmsglst = client_socket.recv(BUFSIZE)
     
     print sendmsglst
@@ -472,7 +488,10 @@ def recv_msg_from_mb():
             break
 
     recvmsg = {'type' : 'recv', 'id' : cid, 'msg' : msgid}
-    client_socket.send(json.dumps(recvmsg) + "\r\n")
+
+    msg_mac = encapsulate_msg(recvmsg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
     recvmsglst = client_socket.recv(BUFSIZE)
 
     print recvmsglst
@@ -510,7 +529,10 @@ def send_receipt(res, msgid):
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
 
     receiptmsg = {'type' : 'receipt', 'id' : cid, 'msg' : msgid, 'receipt' : s, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
-    client_socket.send(json.dumps(receiptmsg) + "\r\n")
+
+    msg_mac = encapsulate_msg(receiptmsg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
 
     print "\nReceipt sent successfully!"
 
@@ -542,13 +564,18 @@ def status():
             break
 
     statmsg = {'type' : 'status', 'id' : cid, 'msg' : msgid}
-    client_socket.send(json.dumps(statmsg) + "\r\n")
+
+    msg_mac = encapsulate_msg(statmsg)
+
+    client_socket.send(json.dumps(msg_mac) + "\r\n")
     statmsglst = client_socket.recv(BUFSIZE)
     print statmsglst
 
     for i in ast.literal_eval(statmsglst)['result']['receipts']:
         if i['id'] == msgid[0]:
             print i['id'] # e agora??????????????????
+
+    # verificar se msgid e igual ao id no result
 
     main()
 
@@ -587,6 +614,7 @@ def read_keys():
         (privkey, pubkey) = rsa.create_asymmetric_key()
         rsa.privkey = privkey
         rsa.pubkey = pubkey
+        print "Public Key: %s" % pubkey
         save_key(privkey, filename1)
 
 
@@ -609,6 +637,42 @@ def getUuid():
         except Exception as e:
             print e
     return uuid
+
+def encapsulate_msg(msg):
+    # convert msg to base64
+    msg64 = base64.encodestring(json.dumps(msg))
+
+    # calcular hmac
+
+    print K
+    print hashlib.sha256(str(K)).digest()
+    print hashlib.sha256(str(K)).digest()
+    print hashlib.sha256(str(K)).digest()
+
+    h = hmac.new(hashlib.sha256(str(K)).digest(), '', hashlib.sha1)
+    h.update(msg64)
+
+    print str(h)
+
+    print "Msg64 = req['payload']"
+    print msg64
+    print "Digest Key"
+    print hashlib.sha256(str(K)).digest()
+    print "h"
+    print h
+    h1 = base64.encodestring(str(h))
+    print "h1 = req['hmac']"
+    print h1
+    h2 = base64.decodestring(h1)
+    print "h2 = d"
+    print h2
+
+    print "Comparacao"
+    print h2==str(h)
+    print hmac.compare_digest(h2, str(h))
+
+    # send encapsulated msg
+    return {'type': 'secure', 'payload': msg64, 'hmac': base64.encodestring(h.hexdigest())}
 
 
 #Begin

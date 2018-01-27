@@ -9,6 +9,8 @@ import M2Crypto
 from OpenSSL import crypto
 from certificates import *
 import datetime
+import hmac
+import base64
 
 class ServerActions:
     def __init__(self):
@@ -50,12 +52,69 @@ class ServerActions:
                 log(logging.ERROR, "Message has no TYPE field")
                 return
 
-            if req['type'] in self.messageTypes:
-                self.messageTypes[req['type']](req, client)
+            #significa que ainda nao se estabeleceu a chave de sessao
+            if req['type'] == 'dh':
+                if req['type'] in self.messageTypes:
+                    self.messageTypes[req['type']](req, client)
+                else:
+                    log(logging.ERROR, "Invalid message type: " +
+                        str(req['type']) + " Should be one of: " + str(self.messageTypes.keys()))
+                    client.sendResult({"error": "unknown request"})
             else:
-                log(logging.ERROR, "Invalid message type: " +
-                    str(req['type']) + " Should be one of: " + str(self.messageTypes.keys()))
-                client.sendResult({"error": "unknown request"})
+                if not req['type'] == 'secure':
+                    log(logging.ERROR, "Invalid message format from client")
+                    return
+
+                if not set({'type', 'payload', 'hmac'}).issubset(set(req.keys())):
+                    log(logging.ERROR, "Insecure message from %s!" % client)
+                    client.sendResult({"error": "Please ensure your message autentication and integrity"})
+                    return
+
+                #try:
+                info = base64.decodestring(req['payload'])
+                data = json.loads(info)
+
+                print client.skey
+                print hashlib.sha256(str(client.skey)).digest()
+                print hashlib.sha256(str(client.skey)).digest()
+                print hashlib.sha256(str(client.skey)).digest()
+
+                #check if hmac is correct
+                h = hmac.new(hashlib.sha256(str(client.skey)).digest(), '', hashlib.sha1)
+                h.update(info)
+
+                d = base64.decodestring(req['hmac'])
+                print "req['payload']"
+                print req['payload']
+                print "Digest Key"
+                print hashlib.sha256(str(client.skey)).digest()
+                print "h"
+                print h
+                print "req['hmac']"
+                print req['hmac']
+                print "d"
+                print d
+
+                print "Comparacao"
+                print d == h.hexdigest()
+                print hmac.compare_digest(d, h.hexdigest())
+
+                if hmac.compare_digest(base64.decodestring(req['hmac']), str(h)):
+                    # process message
+                    if data['type'] in self.messageTypes:
+                        self.messageTypes[data['type']](data, client)
+                    else:
+                        log(logging.ERROR, "Invalid message type: " +
+                            str(data['type']) + " Should be one of: " + str(self.messageTypes.keys()))
+                        client.sendResult({"error": "unknown request"})
+                else:
+                    log(logging.ERROR, "Message Authentication from %s failed!" % client)
+                    client.sendResult({"error": "Please ensure your message autentication and integrity"})
+                '''
+                except:
+                    log(logging.ERROR, "Invalid field type from client")
+                    return
+                '''
 
         except Exception, e:
             logging.exception("Could not handle request")
