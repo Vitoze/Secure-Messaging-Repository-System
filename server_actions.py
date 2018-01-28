@@ -72,30 +72,11 @@ class ServerActions:
                 info = base64.decodestring(req['payload'])
                 data = json.loads(info)
 
-                print client.skey
-                print hashlib.sha256(str(client.skey)).digest()
-                print hashlib.sha256(str(client.skey)).digest()
-                print hashlib.sha256(str(client.skey)).digest()
-
                 #check if hmac is correct
                 h = hmac.new(hashlib.sha256(str(client.skey)).digest(), '', hashlib.sha1)
                 h.update(req['payload'])
 
                 d = base64.decodestring(req['hmac'])
-                print "req['payload']"
-                print req['payload']
-                print "Digest Key"
-                print hashlib.sha256(str(client.skey)).digest()
-                print "h"
-                print h
-                print "req['hmac']"
-                print req['hmac']
-                print "d"
-                print d
-
-                print "Comparacao"
-                print d == h.hexdigest()
-                print hmac.compare_digest(d, h.hexdigest())
 
                 if hmac.compare_digest(base64.decodestring(req['hmac']), h.hexdigest()):
                     # process message
@@ -142,7 +123,7 @@ class ServerActions:
 
         me = self.registry.addUser(data)
 
-        client.sendResult(self.encapsulate_msg({"result": me.id}), client)
+        client.sendResult(self.encapsulate_msg({"result": me.id}, client))
         client.id = me.id
 
     def processList(self, data, client):

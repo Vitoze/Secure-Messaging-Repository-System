@@ -271,16 +271,14 @@ def request_id():
         print "Error!"
 
     # check if hmac is correct
-    h = hmac.new(hashlib.sha256(str(K)).digest(), '', hashlib.sha1)
-    h.update(data['payload'])
-
-    if hmac.compare_digest(base64.decodestring(data['hmac']), h.hexdigest()):
-
+    if verify_HMAC(data):
         if j['id'] == None:
             print 'User not created yet! Please, create a message box!'
         else:
             cid = int(j['id'])
             print 'Your ID is', cid
+    else:
+        print "Message does not match to HMAC"
 
     main()
 
@@ -315,16 +313,36 @@ def create_user_message_box():
 
         client_socket.send(json.dumps(msg_mac) + "\r\n")
 
-        data = client_socket.recv(BUFSIZE)
+        while True:
+            rec = client_socket.recv(BUFSIZE)
+            if rec is not None:
+                data = json.loads(rec)
 
-        res = ast.literal_eval(data)
+                if isinstance(data, dict):
+                    break
 
-        print "\n"
-        if res.keys()[0] == "error":
-            print res['error']
+        if not data['type'] == 'secure':
+            print "Insecure message from server!"
+
+        if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+            print "Invalid message format from server"
+
+        payload = data['payload']
+
+        p = base64.decodestring(payload)
+
+        j = json.loads(p)
+
+        # check if hmac is correct
+        if verify_HMAC(data):
+
+            if j.keys()[0] == "error":
+                print ['error']
+            else:
+                cid = int(j['result'])
+                print "Client ID: ", cid
         else:
-            cid = int(res['result'])
-            print "Client ID: ", cid
+            print "Message does not match to HMAC"
 
     main()
 
@@ -352,31 +370,53 @@ def list_users_msg():
     msg_mac = encapsulate_msg(list)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
-    lst = client_socket.recv(BUFSIZE)
 
-    lst = ast.literal_eval(lst)
+    while True:
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            data = json.loads(rec)
 
-    if lst.keys()[0] == "error":
-        print(lst['error'])
+            if isinstance(data, dict):
+                break
+
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    # check if hmac is correct
+    if verify_HMAC(data):
+
+        if j.keys()[0] == "error":
+            print(j['error'])
+        else:
+            lista = j['result']
+
+        if nid == 0:
+            users_list = {}
+            for coiso in lista:
+                users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+        else:
+            for coiso in lista:
+                users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
+
+        print users_list
+
+        if set(users_list.keys()).issuperset(set({str(cid)})):
+            if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
+                pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
+                print "\n"
+                print pubkey
+                print "\n"
     else:
-        lista = lst['result']
-
-    if nid == 0:
-        users_list = {}
-        for coiso in lista:
-            users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
-    else:
-        for coiso in lista:
-            users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
-
-    print users_list
-
-    if set(users_list.keys()).issuperset(set({str(cid)})):
-        if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
-            pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
-            print "\n"
-            print pubkey
-            print "\n"
+        print "Message does not match to HMAC"
     main()
 
 #New messages
@@ -392,17 +432,37 @@ def new_msg():
     msg_mac = encapsulate_msg(newmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
-    newmsglst = client_socket.recv(BUFSIZE)
-    print newmsglst
 
-    newmsglst = ast.literal_eval(newmsglst)
+    while True:
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            data = json.loads(rec)
 
-    if "error" in newmsglst.keys():
-        print(newmsglst['error'])
+            if isinstance(data, dict):
+                break
+
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    # check if hmac is correct
+    if verify_HMAC(data):
+
+        if "error" in j.keys():
+            print(j['error'])
+        else:
+            newmsglist = j['result']
+            print "List: ", newmsglist
     else:
-        newmsglist = newmsglst['result']
-        print "List: ", newmsglist    
-
+        print "Message does not match to HMAC"
     main()
 
 #All new messages
@@ -418,15 +478,37 @@ def new_all_msg():
     msg_mac = encapsulate_msg(allmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
-    allmsglst = client_socket.recv(BUFSIZE)
 
-    allmsglst = ast.literal_eval(allmsglst)
+    while True:
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            data = json.loads(rec)
 
-    if "error" in allmsglst.keys():
-        print "ERROR: ", allmsglst['error']
+            if isinstance(data, dict):
+                break
+
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    # check if hmac is correct
+    if verify_HMAC(data):
+
+        if "error" in j.keys():
+            print "ERROR: ", j['error']
+        else:
+            allmsglist = j['result']
+            print "All messages: ", allmsglist
     else:
-        allmsglist = allmsglst['result']
-        print "All messages: ", allmsglist 
+        print "Message does not match to HMAC"
 
     main()
 
@@ -478,17 +560,37 @@ def send_msg():
     msg_mac = encapsulate_msg(sendmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
-    sendmsglst = client_socket.recv(BUFSIZE)
-    
-    print sendmsglst
 
-    sendmsglst = ast.literal_eval(sendmsglst)
-    if "error" in sendmsglst.keys():
-        print "\nERROR: ", sendmsglst['error']
+    while True:
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            data = json.loads(rec)
+
+            if isinstance(data, dict):
+                break
+
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    # check if hmac is correct
+    if verify_HMAC(data):
+        if "error" in j.keys():
+            print "\nERROR: ", j['error']
+        else:
+            print "\nSent message successfully!"
+            print "Message ID: ",j['result'][0]
+            print "Receipt ID: ",j['result'][1]
     else:
-        print "\nSent message successfully!"
-        print "Message ID: ",sendmsglst['result'][0]
-        print "Receipt ID: ",sendmsglst['result'][1]
+        print "Message does not match to HMAC"
 
     main()
 
@@ -535,18 +637,37 @@ def recv_msg_from_mb():
     msg_mac = encapsulate_msg(recvmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
-    recvmsglst = client_socket.recv(BUFSIZE)
 
-    print recvmsglst
+    while True:
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            data = json.loads(rec)
 
-    if "error" in ast.literal_eval(recvmsglst).keys():
-        print "\nERROR: ", ast.literal_eval(recvmsglst)['error']
-    else:
-        recv = ast.literal_eval(ast.literal_eval(recvmsglst)['result'][1])
-        msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
-        print "\nMessage received: ", msgrecv
-        # send receipt
-        send_receipt(recvmsglst, msgid)
+            if isinstance(data, dict):
+                break
+
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    # check if hmac is correct
+    if verify_HMAC(data):
+        if "error" in ast.literal_eval(j).keys():
+            print "\nERROR: ", ast.literal_eval(j)['error']
+        else:
+            recv = ast.literal_eval(ast.literal_eval(j)['result'][1])
+            msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
+            print "\nMessage received: ", msgrecv
+            # send receipt
+            send_receipt(j, msgid)
 
     main()
 
@@ -611,14 +732,34 @@ def status():
     msg_mac = encapsulate_msg(statmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
-    statmsglst = client_socket.recv(BUFSIZE)
-    print statmsglst
 
-    for i in ast.literal_eval(statmsglst)['result']['receipts']:
-        if i['id'] == msgid[0]:
-            print i['id'] # e agora??????????????????
+    while True:
+        rec = client_socket.recv(BUFSIZE)
+        if rec is not None:
+            data = json.loads(rec)
 
-    # verificar se msgid e igual ao id no result
+            if isinstance(data, dict):
+                break
+
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    # check if hmac is correct
+    if verify_HMAC(data):
+        for i in ast.literal_eval(j)['result']['receipts']:
+            if i['id'] == msgid[0]:
+                print i['id'] # e agora??????????????????
+
+        # verificar se msgid e igual ao id no result
 
     main()
 
@@ -707,37 +848,22 @@ def encapsulate_msg(msg):
     msg64 = base64.encodestring(json.dumps(msg))
 
     # calcular hmac
-
-    print K
-    print hashlib.sha256(str(K)).digest()
-    print hashlib.sha256(str(K)).digest()
-    print hashlib.sha256(str(K)).digest()
-
     h = hmac.new(hashlib.sha256(str(K)).digest(), '', hashlib.sha1)
     h.update(msg64)
-
-    print str(h)
-
-    print "Msg64 = req['payload']"
-    print msg64
-    print "Digest Key"
-    print hashlib.sha256(str(K)).digest()
-    print "h"
-    print h
-    h1 = base64.encodestring(str(h))
-    print "h1 = req['hmac']"
-    print h1
-    h2 = base64.decodestring(h1)
-    print "h2 = d"
-    print h2
-
-    print "Comparacao"
-    print h2==str(h)
-    print hmac.compare_digest(h2, str(h))
 
     # send encapsulated msg
     return {'type': 'secure', 'payload': msg64, 'hmac': base64.encodestring(h.hexdigest())}
 
+def verify_HMAC(data):
+    global K
+    # check if hmac is correct
+    h = hmac.new(hashlib.sha256(str(K)).digest(), '', hashlib.sha1)
+    h.update(data['payload'])
+
+    if hmac.compare_digest(base64.decodestring(data['hmac']), h.hexdigest()):
+        return True
+    else:
+        return False
 
 #Begin
 try:
