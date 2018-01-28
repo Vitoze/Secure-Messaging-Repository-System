@@ -2,6 +2,9 @@ import logging
 from log import *
 import json
 import sys
+import hmac
+import hashlib
+import base64
 
 TERMINATOR = "\r\n"
 MAX_BUFSIZE = 64 * 1024

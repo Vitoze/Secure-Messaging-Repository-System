@@ -60,6 +60,7 @@ def connectToServer():
         #se recebeu alguma coisa no socket
         if rec is not None:
             data = ast.literal_eval(rec)
+
             print "Received from server message %s" % data
             #verificar se a mensagem esta no formato correto
             if set({'A', 'g', 'p', 'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
@@ -250,17 +251,36 @@ def request_id():
         rec = client_socket.recv(BUFSIZE)
         if rec is not None:
             data = json.loads(rec)
-            #print "Received from server message %s" % data
-            if not set({'id'}).issubset(set(data.keys())):
-                print ("Message sent was not correct!")
-            else:
+
+            if isinstance(data, dict):
                 break
 
-    if data['id'] == None:
-        print 'User not created yet! Please, create a message box!'
-    else:
-        cid = int(data['id'])
-        print 'Your ID is', cid
+    if not data['type'] == 'secure':
+        print "Insecure message from server!"
+
+    if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
+        print "Invalid message format from server"
+
+    payload = data['payload']
+
+    p = base64.decodestring(payload)
+
+    j = json.loads(p)
+
+    if not set({'id'}).issubset(set(j.keys())):
+        print "Error!"
+
+    # check if hmac is correct
+    h = hmac.new(hashlib.sha256(str(K)).digest(), '', hashlib.sha1)
+    h.update(data['payload'])
+
+    if hmac.compare_digest(base64.decodestring(data['hmac']), h.hexdigest()):
+
+        if j['id'] == None:
+            print 'User not created yet! Please, create a message box!'
+        else:
+            cid = int(j['id'])
+            print 'Your ID is', cid
 
     main()
 
