@@ -318,7 +318,7 @@ def create_user_message_box():
         data = client_socket.recv(BUFSIZE)
 
         res = ast.literal_eval(data)
-
+        print res
         print "\n"
         if res.keys()[0] == "error":
             print res['error']
