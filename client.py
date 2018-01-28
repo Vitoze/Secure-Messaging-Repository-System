@@ -43,7 +43,8 @@ password = ""
 
 def connectToServer():
     global client_socket, client_name, privkey, pubkey, K
-    client_name = raw_input('Please, insert your name: ')
+    
+    client_name = raw_input('\nPlease, insert your name: ')
     
     # Conection
     client_socket = socket(AF_INET, SOCK_STREAM)
@@ -207,7 +208,7 @@ def process(op):
         print 'Chosen 7 - Receive a message from message box'
         recv_msg_from_mb()
     elif op == '8':
-        print 'Chosen 8 - List message sent and their receipts'
+        print 'Chosen 8 - Check message status'
         status()
     elif op == '9':
         print 'Chosen 9 - Exit from aplication'
@@ -221,18 +222,20 @@ def process(op):
 def request_id():
     global cid, rsa, K, password
 
+    seqnumber = random.randint(0, 1500)
+
     if not existsDirectory():
-        print "Please, first choose the option 2 - Create a user message box!"
+        print "\nPlease, first choose the option 2 - Create a user message box!"
         main()
 
     if not cid == -1:
-        print "Your ID is:", cid
+        print "\nYour client ID is:", cid
         main()
 
 
     if rsa == None:
         while True:
-            password = raw_input("Insert your password to read your keys: ")
+            password = raw_input("\nInsert your password to read your keys: ")
         
             if password == "":
                 print "\nWrong password! Password is empty!" 
@@ -241,7 +244,7 @@ def request_id():
                     
         read_keys(password)
 
-    msg = {'type' : 'request', 'uuid' : base64.encodestring(getUuid())}
+    msg = {'type' : 'request', 'sn' : seqnumber, 'uuid' : base64.encodestring(getUuid())}
 
     msg_mac = encapsulate_msg(msg)
 
@@ -256,10 +259,10 @@ def request_id():
                 break
 
     if not data['type'] == 'secure':
-        print "Insecure message from server!"
+        print "\nInsecure message from server!"
 
     if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
-        print "Invalid message format from server"
+        print "\nInvalid message format from server"
 
     payload = data['payload']
 
@@ -267,18 +270,23 @@ def request_id():
 
     j = json.loads(p)
 
-    if not set({'id'}).issubset(set(j.keys())):
-        print "Error!"
+    print j
 
-    # check if hmac is correct
-    if verify_HMAC(data):
-        if j['id'] == None:
-            print 'User not created yet! Please, create a message box!'
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        if "error" in j.keys():
+            print "ERROR: ", j['error']
+
+        # check if hmac is correct
+        if verify_HMAC(data):
+            if j['id'] == None:
+                print '\nUser not created yet! Please, create a message box!'
+            else:
+                cid = int(j['id'])
+                print '\nYour client ID is', cid
         else:
-            cid = int(j['id'])
-            print 'Your ID is', cid
+            print "\nMessage does not match to HMAC"
     else:
-        print "Message does not match to HMAC"
+        print "\nSequence number is not valid!"
 
     main()
 
@@ -287,7 +295,15 @@ def request_id():
 def create_user_message_box():
     global pubkey, cid, password
 
-    password = raw_input("Insert one password to encrypt your personal files: ")
+    seqnumber = random.randint(0, 1500)
+
+    create_directory()
+
+    if existsDirectory():
+        print "\nYour message box already exists!"
+        main()
+
+    password = raw_input("\nInsert one password to encrypt your personal files: ")
     read_keys(password)
     public_key = base64.encodestring(pubkey)
 
@@ -303,11 +319,8 @@ def create_user_message_box():
 
 
         #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
-        msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
 
-        client_socket.send(json.dumps(msg) + "\r\n")
-
-        msg = {'type': 'create', 'uuid': uuid64, 'pubkey': public_key}
+        msg = {'type': 'create', 'sn': seqnumber, 'uuid': uuid64, 'pubkey': public_key}
 
         msg_mac = encapsulate_msg(msg)
 
@@ -322,10 +335,10 @@ def create_user_message_box():
                     break
 
         if not data['type'] == 'secure':
-            print "Insecure message from server!"
+            print "\nInsecure message from server!"
 
         if not set({'type', 'payload', 'hmac'}).issubset(set(data.keys())):
-            print "Invalid message format from server"
+            print "\nInvalid message format from server"
 
         payload = data['payload']
 
@@ -333,16 +346,22 @@ def create_user_message_box():
 
         j = json.loads(p)
 
-        # check if hmac is correct
-        if verify_HMAC(data):
+        print j
 
-            if j.keys()[0] == "error":
-                print ['error']
+        if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+            # check if hmac is correct
+            if verify_HMAC(data):
+
+                if "error" in j.keys():
+                    print j['error']
+                    deleteDirectory()
+                else:
+                    cid = int(j['result'])
+                    print "\nClient ID: ", cid
             else:
-                cid = int(j['result'])
-                print "Client ID: ", cid
+                print "\nMessage does not match to HMAC"
         else:
-            print "Message does not match to HMAC"
+            print "\nSequence number is not valid!"
 
     main()
 
@@ -351,6 +370,8 @@ def create_user_message_box():
 def list_users_msg():
     global users_list, cid, pubkey
     nid = 0
+
+    seqnumber = random.randint(0, 1500)
     
     if cid == -1:
         print "\nWrong Client ID! Please, create a message or resquest id!"
@@ -363,11 +384,11 @@ def list_users_msg():
 
     if r == 'Y' or r == 'y':
         nid = raw_input("Insert ID: ")
-        list = {'type' : 'list', 'id' : nid}
+        lista = {'type' : 'list', 'sn': seqnumber, 'id' : nid}
     else:
-        list = {'type' : 'list'}
+        lista = {'type' : 'list', 'sn': seqnumber}
 
-    msg_mac = encapsulate_msg(list)
+    msg_mac = encapsulate_msg(lista)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
 
@@ -391,43 +412,49 @@ def list_users_msg():
 
     j = json.loads(p)
 
-    # check if hmac is correct
-    if verify_HMAC(data):
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        # check if hmac is correct
+        if verify_HMAC(data):
 
-        if j.keys()[0] == "error":
-            print(j['error'])
-        else:
-            lista = j['result']
+            if "error" in j.keys():
+                print(j['error'])
+            else:
+                lista = j['result']
 
-        if nid == 0:
             users_list = {}
-            for coiso in lista:
-                users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+            if nid == 0:
+                for coiso in lista:
+                    users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+            else:
+                for coiso in lista:
+                    users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
+
+            print users_list
+
+            if set(users_list.keys()).issuperset(set({str(cid)})):
+                if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
+                    pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
+                    print "\n"
+                    print pubkey
+                    print "\n"
         else:
-            for coiso in lista:
-                users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
-
-        print users_list
-
-        if set(users_list.keys()).issuperset(set({str(cid)})):
-            if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
-                pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
-                print "\n"
-                print pubkey
-                print "\n"
+            print "Message does not match to HMAC"
     else:
-        print "Message does not match to HMAC"
+        print "\nSequence number is not valid!"
+    
     main()
 
 #New messages
 def new_msg():
     global cid
 
+    seqnumber = random.randint(0, 1500)
+
     if cid == -1:
         print "\nWrong client ID! Please, create a message or resquest id!"
         main()
 
-    newmsg = {'type' : 'new', 'id' : cid}
+    newmsg = {'type' : 'new', 'sn': seqnumber, 'id' : cid}
 
     msg_mac = encapsulate_msg(newmsg)
 
@@ -453,27 +480,33 @@ def new_msg():
 
     j = json.loads(p)
 
-    # check if hmac is correct
-    if verify_HMAC(data):
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        # check if hmac is correct
+        if verify_HMAC(data):
 
-        if "error" in j.keys():
-            print(j['error'])
+            if "error" in j.keys():
+                print(j['error'])
+            else:
+                newmsglist = j['result']
+                print "List: ", newmsglist
         else:
-            newmsglist = j['result']
-            print "List: ", newmsglist
+            print "Message does not match to HMAC"
     else:
-        print "Message does not match to HMAC"
+        print "\nSequence number is not valid!"
+    
     main()
 
 #All new messages
 def new_all_msg():
     global cid, allmsglist
 
+    seqnumber = random.randint(0, 1500)
+
     if cid == -1:
         print "\nWrong client ID! Please, create a message or resquest id!"
         main()
 
-    allmsg = {'type' : 'all', 'id' : cid}
+    allmsg = {'type' : 'all', 'sn': seqnumber, 'id' : cid}
 
     msg_mac = encapsulate_msg(allmsg)
 
@@ -499,22 +532,27 @@ def new_all_msg():
 
     j = json.loads(p)
 
-    # check if hmac is correct
-    if verify_HMAC(data):
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        # check if hmac is correct
+        if verify_HMAC(data):
 
-        if "error" in j.keys():
-            print "ERROR: ", j['error']
+            if "error" in j.keys():
+                print "ERROR: ", j['error']
+            else:
+                allmsglist = j['result']
+                print "All messages: ", allmsglist
         else:
-            allmsglist = j['result']
-            print "All messages: ", allmsglist
+            print "Message does not match to HMAC"
     else:
-        print "Message does not match to HMAC"
+        print "\nSequence number is not valid!"
 
     main()
 
 #Send message
 def send_msg():
     global cid, K, users_list
+
+    seqnumber = random.randint(0, 1500)
 
     if K == -1:
         print "\nWrong Session Key! Please, try a new connection!"
@@ -528,18 +566,15 @@ def send_msg():
         print "\nPlease, choose first \"3 - List users messages boxes\""
         main()
 
-    flag = False
-    while flag == False:
-
+    while True:
         dstid = raw_input("\nInsert destination ID: ")
         
         if set(users_list.keys()).issuperset(set({str(dstid)})):
-            if cid != int(dstid):
-                flag = True
-            else:
-                print "\nWrong destination ID! Your destination ID is equals to client ID"
+            break
         else:
-            print "\nWrong destination ID!"
+            print "\nNot enough information to send a message to client %s" %dstid
+            print "\nPlease, choose first \"3 - List users messages boxes\""
+            main()
 
     txt = raw_input("Message: ")
     
@@ -555,7 +590,7 @@ def send_msg():
     copy_msg = aes_copy.encrypt(txt)
     copy_key = dst_cipher.encrypt_pub(aes_copy.key)
 
-    sendmsg = {'type' : 'send', 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : copy_msg, 'msgkey' : msg_key, 'copykey' : copy_key}
+    sendmsg = {'type' : 'send', 'sn': seqnumber, 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : copy_msg, 'msgkey' : msg_key, 'copykey' : copy_key}
 
     msg_mac = encapsulate_msg(sendmsg)
 
@@ -581,22 +616,27 @@ def send_msg():
 
     j = json.loads(p)
 
-    # check if hmac is correct
-    if verify_HMAC(data):
-        if "error" in j.keys():
-            print "\nERROR: ", j['error']
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        # check if hmac is correct
+        if verify_HMAC(data):
+            if "error" in j.keys():
+                print "\nERROR: ", j['error']
+            else:
+                print "\nSent message successfully!"
+                print "Message ID: ",j['result'][0]
+                print "Receipt ID: ",j['result'][1]
         else:
-            print "\nSent message successfully!"
-            print "Message ID: ",j['result'][0]
-            print "Receipt ID: ",j['result'][1]
+            print "Message does not match to HMAC"
     else:
-        print "Message does not match to HMAC"
+        print "\nSequence number is not valid!"
 
     main()
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
     global cid, rsa, allmsglist, password
+
+    seqnumber = random.randint(0, 1500)
 
     if cid == -1:
         print "\nWrong Client ID! Please, create a message or resquest id!"
@@ -613,10 +653,6 @@ def recv_msg_from_mb():
                 
         read_keys(password)
 
-    if allmsglist == []:
-        print "\nPlease, choose first \"5 - List all messages received\""
-        main()
-
     while True:
         msgid = raw_input("\nInsert message ID: ")
         
@@ -626,13 +662,10 @@ def recv_msg_from_mb():
         if not matches:
             print "\nWrong format message ID!"
             print "Format: \"_Number_Number\" or \"Number_Number\""
-        elif not msgid in allmsglist[0]:
-            print "\nWrong message ID! Message not exists!"
-            print "Available messages: ", allmsglist[0]
         else:
             break
 
-    recvmsg = {'type' : 'recv', 'id' : cid, 'msg' : msgid}
+    recvmsg = {'type' : 'recv', 'sn': seqnumber, 'id' : cid, 'msg' : msgid}
 
     msg_mac = encapsulate_msg(recvmsg)
 
@@ -658,16 +691,19 @@ def recv_msg_from_mb():
 
     j = json.loads(p)
 
-    # check if hmac is correct
-    if verify_HMAC(data):
-        if "error" in ast.literal_eval(j).keys():
-            print "\nERROR: ", ast.literal_eval(j)['error']
-        else:
-            recv = ast.literal_eval(ast.literal_eval(j)['result'][1])
-            msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
-            print "\nMessage received: ", msgrecv
-            # send receipt
-            send_receipt(j, msgid)
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        # check if hmac is correct
+        if verify_HMAC(data):
+            if "error" in j.keys():
+                print "\nERROR: ", j['error']
+            else:
+                recv = ast.literal_eval(j['result'][1])
+                msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
+                print "\nMessage received: ", msgrecv
+                # send receipt
+                send_receipt(json.dumps(j), msgid)
+    else:
+        print "\nSequence number is not valid!"
 
     main()
 
@@ -675,6 +711,8 @@ def recv_msg_from_mb():
 #Send receipt for a message
 def send_receipt(res, msgid):
     global cid
+
+    seqnumber = random.randint(0, 1500)
     
     if cid == -1:
         print "\nWrong Client ID! Please, create a message or request id!"
@@ -692,7 +730,7 @@ def send_receipt(res, msgid):
     pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
 
-    receiptmsg = {'type' : 'receipt', 'id' : cid, 'msg' : msgid, 'receipt' : s, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
+    receiptmsg = {'type' : 'receipt', 'sn': seqnumber, 'id' : cid, 'msg' : msgid, 'receipt' : s, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
 
     msg_mac = encapsulate_msg(receiptmsg)
 
@@ -704,12 +742,10 @@ def send_receipt(res, msgid):
 def status():
     global cid
 
+    seqnumber = random.randint(0, 1500)
+
     if cid == -1:
         print "\nWrong Client ID! Please, create a message or resquest id!"
-        main()
-
-    if allmsglist == []:
-        print "\nPlease, choose first \"5 - List all messages received\""
         main()
 
     while True:
@@ -721,13 +757,10 @@ def status():
         if not matches:
             print "\nWrong format message ID!"
             print "Format: \"Number_Number\""
-        elif not msgid in allmsglist[1]:
-            print "\nWrong message ID! Message not exists!"
-            print "Available messages: ", allmsglist[1]
         else:
             break
 
-    statmsg = {'type' : 'status', 'id' : cid, 'msg' : msgid}
+    statmsg = {'type' : 'status', 'sn': seqnumber, 'id' : cid, 'msg' : msgid}
 
     msg_mac = encapsulate_msg(statmsg)
 
@@ -753,13 +786,19 @@ def status():
 
     j = json.loads(p)
 
-    # check if hmac is correct
-    if verify_HMAC(data):
-        for i in ast.literal_eval(j)['result']['receipts']:
-            if i['id'] == msgid[0]:
-                print i['id'] # e agora??????????????????
-
-        # verificar se msgid e igual ao id no result
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
+        if "error" in j.keys():
+            print "\nERROR: ", j['error']
+        # check if hmac is correct
+        print "\n"
+        print j
+        if verify_HMAC(data):
+            for i in j['result']['receipts']:
+                # verificar se msgid e igual ao id no result
+                if i['id'] == msgid[0]:
+                    print "\n", i['id']
+    else:
+        print "\nSequence number is not valid!" 
 
     main()
 
@@ -768,7 +807,8 @@ def exit():
 
 def create_directory():
     global directory
-    n = os.getcwd() + "/" + client_name + "/"
+
+    n = os.getcwd() + "/" + client_name.lower() + "/"
     directory = os.path.dirname(n)
 
     try:
@@ -784,6 +824,13 @@ def existsDirectory():
     if os.path.exists(filename):
         return True
     return False
+
+def deleteDirectory():
+    global directory
+
+    filename = directory + "/privkey.txt.enc"
+    os.remove(filename)
+    os.rmdir(directory)
 
 def read_keys(password):
     global pubkey, rsa

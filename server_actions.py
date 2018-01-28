@@ -103,7 +103,7 @@ class ServerActions:
         if 'uuid' not in data.keys():
             log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
             return
 
         #uuid = base64.decodestring(data['uuid'])
@@ -118,12 +118,12 @@ class ServerActions:
         print type(data['uuid'])
         if self.registry.uuidExists(data['uuid']):
             log(logging.ERROR, "User already exists: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "uuid already exists"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "uuid already exists", "sn": data['sn']+1}, client))
             return
 
         me = self.registry.addUser(data)
 
-        client.sendResult(self.encapsulate_msg({"result": me.id}, client))
+        client.sendResult(self.encapsulate_msg({"result": me.id, "sn": data['sn']+1}, client))
         client.id = me.id
 
     def processList(self, data, client):
@@ -135,11 +135,17 @@ class ServerActions:
             user = int(data['id'])
             userStr = "user%d" % user
 
+        if not self.registry.userExists(user):
+            log(logging.ERROR,
+                "Unknown id: " + json.dumps(data))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            return
+
         log(logging.DEBUG, "List %s" % userStr)
 
         userList = self.registry.listUsers(user)
 
-        client.sendResult(self.encapsulate_msg({"result": userList}, client))
+        client.sendResult(self.encapsulate_msg({"result": userList, "sn": data['sn']+1}, client))
 
     def processNew(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -151,16 +157,16 @@ class ServerActions:
         if user < 0:
             log(logging.ERROR,
                 "No valid \"id\" field in \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
             return
 
         if not client.id == user:
             log(logging.ERROR,
                 "Wrong client id for \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
             return
 
-        client.sendResult(self.encapsulate_msg({"result":  self.registry.userNewMessages(user)}, client))
+        client.sendResult(self.encapsulate_msg({"result":  self.registry.userNewMessages(user), "sn": data['sn']+1}, client))
 
     def processAll(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -172,16 +178,16 @@ class ServerActions:
         if user < 0:
             log(logging.ERROR,
                 "No valid \"id\" field in \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
             return
 
         if not client.id == user:
             log(logging.ERROR,
                 "Wrong client id for \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
             return
 
-        client.sendResult(self.encapsulate_msg({"result": [self.registry.userAllMessages(user), self.registry.userSentMessages(user)]}, client))
+        client.sendResult(self.encapsulate_msg({"result": [self.registry.userAllMessages(user), self.registry.userSentMessages(user)], "sn": data['sn']+1}, client))
 
     def processSend(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -189,7 +195,7 @@ class ServerActions:
         if not set(data.keys()).issuperset(set({'src', 'dst', 'msg', 'copy', 'msgkey', 'copykey'})):
             log(logging.ERROR,
                 "Badly formated \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
 
         srcId = int(data['src'])
         dstId = int(data['dst'])
@@ -199,26 +205,32 @@ class ServerActions:
         if not client.id == srcId:
             log(logging.ERROR,
                 "Wrong client id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
             return
 
         if not self.registry.userExists(srcId):
             log(logging.ERROR,
                 "Unknown source id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
             return
 
         if not self.registry.userExists(dstId):
             log(logging.ERROR,
                 "Unknown destination id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            return
+
+        if srcId == dstId:
+            log(logging.ERROR,
+                "Wrong client id for \"send\" message: " + json.dumps(data))
+            client.sendResult(self.encapsulate_msg({"error": "You can not send a message for yourself!", "sn": data['sn']+1}, client))
             return
 
         # Save message and copy
 
         response = self.registry.sendMessage(srcId, dstId, msg, copy)
 
-        client.sendResult(self.encapsulate_msg({"result": response}, client))
+        client.sendResult(self.encapsulate_msg({"result": response, "sn": data['sn']+1}, client))
 
     def processRecv(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -226,7 +238,7 @@ class ServerActions:
         if not set({'id', 'msg'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"recv\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
 
         fromId = int(data['id'])
         msg = str(data['msg'])
@@ -234,26 +246,26 @@ class ServerActions:
         if not client.id == fromId:
             log(logging.ERROR,
                 "Wrong client id for \"recv\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
             return
 
         if not self.registry.userExists(fromId):
             log(logging.ERROR,
                 "Unknown source id for \"recv\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
             return
 
         if not self.registry.messageExists(fromId, msg):
             log(logging.ERROR,
                 "Unknown source msg for \"recv\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
             return
 
         # Read message
 
         response = self.registry.recvMessage(fromId, msg)
 
-        client.sendResult(self.encapsulate_mg({"result": response, "time" : datetime.datetime.now().isoformat()}, client))
+        client.sendResult(self.encapsulate_msg({"result": response, "time" : datetime.datetime.now().isoformat(), "sn": data['sn']+1}, client))
 
     def processReceipt(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -261,7 +273,7 @@ class ServerActions:
         if not set({'id', 'msg', 'receipt', 'cert', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"receipt\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong request format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong request format", "sn": data['sn']+1}, client))
 
         fromId = int(data["id"])
         msg = str(data['msg'])
@@ -270,12 +282,12 @@ class ServerActions:
         if not client.id == fromId:
             log(logging.ERROR,
                 "Wrong client id for \"receipt\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
             return
 
         if not self.registry.messageWasRed(str(fromId), msg):
             log(logging.ERROR, "Unknown, or not yet red, message for \"receipt\" request " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
             return
 
         self.registry.storeReceipt(fromId, msg, receipt)
@@ -286,7 +298,7 @@ class ServerActions:
         if not set({'id', 'msg'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
         
         fromId = int(data['id'])
         msg = str(data["msg"])
@@ -294,16 +306,16 @@ class ServerActions:
         if not client.id == fromId:
             log(logging.ERROR,
                 "Wrong client id for \"status\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
             return
 
         if(not self.registry.copyExists(fromId, msg)):
             log(logging.ERROR, "Unknown message for \"status\" request: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error", "wrong parameters"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
             return
 
         response = self.registry.getReceipts(fromId, msg)
-        client.sendResult(self.encapsulate_msg({"result": response}, client))
+        client.sendResult(self.encapsulate_msg({"result": response, "sn": data['sn']+1}, client))
 
     def processDH(self, data, client):
         log(logging.DEBUG, "%s" % json.dumps(data))
@@ -390,13 +402,13 @@ class ServerActions:
         if 'uuid' not in data.keys():
             log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format"}, client))
+            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
             return
 
         if self.registry.uuidExists(data['uuid']):
             client.id = self.registry.getUserId(data['uuid'])
 
-        msg = {'id' : client.id}
+        msg = {'id' : client.id, "sn": data['sn']+1}
 
         client.sendResult(self.encapsulate_msg(msg, client))
 
