@@ -18,9 +18,8 @@ from certificates import *
 from OpenSSL import crypto
 import pytz
 import datetime
-
+from fileenc_openssl import stretch_key, encrypt_file, decrypt_file
 import re
-
 import hmac
 import base64
 
@@ -39,6 +38,8 @@ global users_list
 users_list = {}
 global allmsglist
 allmsglist = []
+global password
+password = ""
 
 def connectToServer():
     global client_socket, client_name, privkey, pubkey, K
@@ -217,14 +218,27 @@ def process(op):
 
 #Request id
 def request_id():
-    global cid, rsa, K
+    global cid, rsa, K, password
 
-    if not cid == -1:
-        print "Your ID is: ", cid
+    if not existsDirectory():
+        print "Please, first choose the option 2 - Create a user message box!"
         main()
 
+    if not cid == -1:
+        print "Your ID is:", cid
+        main()
+
+
     if rsa == None:
-        read_keys()
+        while True:
+            password = raw_input("Insert your password to read your keys: ")
+        
+            if password == "":
+                print "\nWrong password! Password is empty!" 
+            else:
+                break
+                    
+        read_keys(password)
 
     msg = {'type' : 'request', 'uuid' : base64.encodestring(getUuid())}
 
@@ -253,9 +267,10 @@ def request_id():
 
 #Create user message box
 def create_user_message_box():
-    global pubkey, cid
+    global pubkey, cid, password
 
-    read_keys()
+    password = raw_input("Insert one password to encrypt your personal files: ")
+    read_keys(password)
     public_key = base64.encodestring(pubkey)
 
 
@@ -459,14 +474,22 @@ def send_msg():
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
-    global cid, rsa, allmsglist
+    global cid, rsa, allmsglist, password
 
     if cid == -1:
         print "\nWrong Client ID! Please, create a message or resquest id!"
         main()
 
     if rsa == None:
-        read_keys()
+        while True:
+            password = raw_input("Insert your password to read your keys: ")
+        
+            if password == "":
+                print "\nWrong password! Password is empty!" 
+            else:
+                break
+                
+        read_keys(password)
 
     if allmsglist == []:
         print "\nPlease, choose first \"5 - List all messages received\""
@@ -593,29 +616,50 @@ def create_directory():
     except OSError as e:
             log(logging.ERROR, str(e.errno))
 
+def existsDirectory():
+    global directory
+    
+    filename = directory + "/privkey.txt.enc"
+    if os.path.exists(filename):
+        return True
+    return False
 
-
-def read_keys():
+def read_keys(password):
     global pubkey, rsa
 
-    filename1 = directory + "/privkey.txt"
+    filename1 = directory + "/privkey.txt.enc"
 
     if os.path.exists(filename1):
+
+        # encrypt file
+        res_pth = decrypt_file(filename1, key=password)
+        os.remove(filename1)
+        
         try:
-            file = open(filename1, 'r+')
+            file = open(filename1[:-4], 'r+')
             privkey = file.read()
             rsa = RSACipher(privkey, None)
         except OSError as e:
             log(logging.ERROR, str(e.errno))
 
         file.close()
+
+        # decrypt file
+        encrypt_file(filename1[:-4], key=password)
+        os.remove(filename1[:-4]) 
+
     else:
         rsa = RSACipher(None, None)
         (privkey, pubkey) = rsa.create_asymmetric_key()
         rsa.privkey = privkey
         rsa.pubkey = pubkey
         print "Public Key: %s" % pubkey
-        save_key(privkey, filename1)
+        
+        save_key(privkey, filename1[:-4])
+        
+        #encrypt file
+        encrypt_file(filename1[:-4], key=password)
+        os.remove(filename1[:-4]) 
 
 
 def save_key(key, directory):
