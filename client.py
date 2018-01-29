@@ -50,15 +50,14 @@ def connectToServer():
     client_socket = socket(AF_INET, SOCK_STREAM)
     print 'Connecting to server...'
     client_socket.connect(('127.0.0.1', 8080))
-    print 'Stablishing a secure connection...'
 
-    print 'Stablishing session key...'
     data = None
 
     #waiting received A, g and p from server
     while True:
         rec = client_socket.recv(BUFSIZE)
         #se recebeu alguma coisa no socket
+        print 'Stablishing session key...'
         if rec is not None:
             data = ast.literal_eval(rec)
 
@@ -75,62 +74,23 @@ def connectToServer():
                     json.dumps(data))
                 #client_socket.sendResult({"error": "wrong message format"})
 
-    #verify if signature is valid
-    print "Validations: \n"
-    print " - Validating signature"
-    c = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
-    s = data['sign']
-    sig = base64.decodestring(s)
-    valid_sig = crypto.verify(c, sig, str(data['A']), "sha256")
-    if valid_sig != None:
-        print "Invalid Signature"
+    # verify if signature is valid
+    valid_sig = validateServerSig(data['cert'], data['A'], data['sign'], data['datetime'])
+    if not valid_sig:
+        print "Signature is not valid"
         #do something
-
-    #validate signature time
-    print " - Validating signature time"
-    date1 = datetime.datetime.strptime(c.get_notAfter(), '%Y%m%d%H%M%SZ')
-    date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
-    date3 = datetime.datetime.strptime(c.get_notBefore(), '%Y%m%d%H%M%SZ')
-
-    if date1 <= date2:
-        print "Invalid signature time"
-        #do something
-    if date3 >= date2:
-        print "Invalid signature time"
-        #do something
-
-    #verify if certificate is valid
-    print " - Validating certificate and certificate chain"
-    (is_valid, motive) = validateCertificate(c)
-    #chain = generateCertChain(c)
-    #valid_cert = verifyChain(chain, c)
-    #if valid_cert != None:
-    #    print "Certificate is not valid"
-        #do something
-    if not is_valid:
-        print "Certificate is not valid"
-        # do something
-
 
     #Calcular B = g^b mod p
     b = random.randint(2, 30)
     B = (data['g']**b)%data['p']
 
-    #get signature private key from CC
-    private_key = getCCPrivKey("CITIZEN SIGNATURE KEY")
+    seqnumber = random.randint(0, 1500)
 
-    #Assinar B para enviar ao servidor
-    print "Signing answer to server..."
-    sig = signWithCC(private_key, str(B))
-    dt = datetime.datetime.now()
-    s = base64.encodestring(sig)
+    msg = {'type': 'dh', 'B': B, 'sn': seqnumber}
 
-    #get citizen signature public key certificate
-    pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
-    signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
-
-    #Mensagem dh para enviar B ao server
-    msg = {'type' : 'dh', 'B' : B, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'sign': s, 'datetime': dt.isoformat()}
+    # sign B to send to server
+    print "Signing %s to send to server" % msg
+    userSignMessage('B', msg)
 
     print "Sending message to server: %s" % msg
     client_socket.send(json.dumps(msg) + "\r\n")
@@ -145,21 +105,45 @@ def connectToServer():
         if rec is not None:
             data = ast.literal_eval(rec)
             print "Received from server message %s" % data
-            if set({'ok'}).issubset(set(data.keys())):
+            if set({'ok', 'cert', 'sign', 'datetime', 'sn'}).issubset(set(data.keys())):
                 #verificar se os conteudos dos campos sao str
                 if(isinstance(data['ok'], str)):
                     #verificar se os conteudos dos campos nao sao nulos
                     if(data['ok'] != ""):
                         break
+            elif "error" in data.keys():
+                    print "ERROR: ", data['error']
             else:
-                log(logging.ERROR, "Badly formated \"status\" message: " +
-                    json.dumps(data))
+                print "Message received is not in the expected format."
+                exit()
 
-    if data['ok'] == "not ok":
-        exit()
+    print "Received %s from server" % data
 
-    msg = {'type' : 'dh','ok' : "ok"}
-    client_socket.send(json.dumps(msg) + "\r\n")
+    if set({'sn'}).issubset(set(data.keys())) and data['sn'] == seqnumber+1:
+        if set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
+            # verify if signature is valid
+
+            valid_sig = validateServerSig(data['cert'], data['ok'], data['sign'], data['datetime'])
+
+            if valid_sig:
+                if data['ok'] == "not ok":
+                    exit()
+
+                msg = {'type': 'dh', 'ok': "ok"}
+
+                #sign ok to send to server
+                print "Signing %s to send to server" % msg
+                userSignMessage('ok', msg)
+
+                print "Sending message to server: %s" % msg
+                client_socket.send(json.dumps(msg) + "\r\n")
+            else:
+                print "Signature is not correct!"
+        else:
+            print "No signature field in server message"
+            # do something
+    else:
+        print "\nSequence number is not valid!"
 
     print '...Done'
     print 'Welcome client',client_name,'!\n'
@@ -232,7 +216,6 @@ def request_id():
         print "\nYour client ID is:", cid
         main()
 
-
     if rsa == None:
         while True:
             password = raw_input("\nInsert your password to read your keys: ")
@@ -246,8 +229,13 @@ def request_id():
 
     msg = {'type' : 'request', 'sn' : seqnumber, 'uuid' : base64.encodestring(getUuid())}
 
+    #sign uuid to send to server
+    print "Signing %s to send to server" % msg
+    userSignMessage('uuid', msg)
+
     msg_mac = encapsulate_msg(msg)
 
+    #print "Sending message to server: %s" % msg
     client_socket.send(json.dumps(msg_mac) + "\r\n")
 
     while True:
@@ -268,21 +256,29 @@ def request_id():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
 
-    print j
+    print "Received %s from server" % j
 
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         if "error" in j.keys():
             print "ERROR: ", j['error']
-
         # check if hmac is correct
         if verify_HMAC(data):
-            if j['id'] == None:
-                print '\nUser not created yet! Please, create a message box!'
+            if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                # verify if signature is valid
+                valid_sig = validateServerSig(j['cert'], j['id'], j['sign'], j['datetime'])
+                if valid_sig:
+                    if j['id'] == None:
+                        print '\nUser not created yet! Please, create a message box!'
+                    else:
+                        cid = int(j['id'])
+                        print '\nYour client ID is', cid
+                else:
+                    print "Signature is not correct!"
             else:
-                cid = int(j['id'])
-                print '\nYour client ID is', cid
+                print "No signature field in server message"
+                # do something
         else:
             print "\nMessage does not match to HMAC"
     else:
@@ -307,8 +303,6 @@ def create_user_message_box():
     read_keys(password)
     public_key = base64.encodestring(pubkey)
 
-
-    #uuid = '15'
     uuid = getUuid()
     uuid64 = base64.encodestring(uuid)
     '''
@@ -321,6 +315,10 @@ def create_user_message_box():
         #msg = {'type' : 'create', 'uuid' : uuid64, 'pubkey': crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)}
 
         msg = {'type': 'create', 'sn': seqnumber, 'uuid': uuid64, 'pubkey': public_key}
+
+        # sign uuid to send to server
+        print "Signing %s to send to server" % msg
+        userSignMessage('uuid', msg)
 
         msg_mac = encapsulate_msg(msg)
 
@@ -344,10 +342,11 @@ def create_user_message_box():
 
         p = base64.decodestring(payload)
 
-        j = json.loads(p)
+        j = ast.literal_eval(p)
 
-        print j
+        print "Received %s from server" % j
 
+        '''
         if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
             # check if hmac is correct
             if verify_HMAC(data):
@@ -358,6 +357,31 @@ def create_user_message_box():
                 else:
                     cid = int(j['result'])
                     print "\nClient ID: ", cid
+            else:
+                print "\nMessage does not match to HMAC"
+        else:
+            print "\nSequence number is not valid!"
+            
+        '''
+
+        if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber + 1:
+            # check if hmac is correct
+            if verify_HMAC(data):
+                if "error" in j.keys():
+                    print "ERROR: ", j['error']
+                    deleteDirectory()
+                else:
+                    if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                        # verify if signature is valid
+                        valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
+                        if valid_sig:
+                            cid = int(j['result'])
+                            print "\nClient ID: ", cid
+                        else:
+                            print "Signature is not correct!"
+                    else:
+                        print "No signature field in server message"
+                        # do something
             else:
                 print "\nMessage does not match to HMAC"
         else:
@@ -388,6 +412,10 @@ def list_users_msg():
     else:
         lista = {'type' : 'list', 'sn': seqnumber}
 
+    # sign sn to send to server
+    print "Signing %s to send to server" % lista
+    userSignMessage('sn', lista)
+
     msg_mac = encapsulate_msg(lista)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
@@ -410,8 +438,49 @@ def list_users_msg():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
 
+    print "Received %s from server" % j
+
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber + 1:
+        # check if hmac is correct
+        if verify_HMAC(data):
+            if "error" in j.keys():
+                print "ERROR: ", j['error']
+            else:
+                if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        lista = j['result']
+
+                        users_list = {}
+                        if nid == 0:
+                            for coiso in lista:
+                                users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+                        else:
+                            for coiso in lista:
+                                users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
+
+                        print users_list
+
+                        if set(users_list.keys()).issuperset(set({str(cid)})):
+                            if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
+                                pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
+                                print "\n"
+                                print pubkey
+                                print "\n"
+                    else:
+                        print "Signature is not correct!"
+                else:
+                    print "No signature field in server message"
+                    # do something
+        else:
+            print "\nMessage does not match to HMAC"
+    else:
+        print "\nSequence number is not valid!"
+
+    '''
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         # check if hmac is correct
         if verify_HMAC(data):
@@ -442,6 +511,8 @@ def list_users_msg():
     else:
         print "\nSequence number is not valid!"
     
+    '''
+    
     main()
 
 #New messages
@@ -455,6 +526,10 @@ def new_msg():
         main()
 
     newmsg = {'type' : 'new', 'sn': seqnumber, 'id' : cid}
+
+    # sign id to send to server
+    print "Signing %s to send to server" % newmsg
+    userSignMessage('id', newmsg)
 
     msg_mac = encapsulate_msg(newmsg)
 
@@ -478,8 +553,11 @@ def new_msg():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
 
+    print "Received %s from server" % j
+
+    '''
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         # check if hmac is correct
         if verify_HMAC(data):
@@ -493,7 +571,31 @@ def new_msg():
             print "Message does not match to HMAC"
     else:
         print "\nSequence number is not valid!"
-    
+        
+    '''
+
+    if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber + 1:
+        # check if hmac is correct
+        if verify_HMAC(data):
+            if "error" in j.keys():
+                print "ERROR: ", j['error']
+            else:
+                if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        newmsglist = j['result']
+                        print "List: ", newmsglist
+                    else:
+                        print "Signature is not correct!"
+                else:
+                    print "No signature field in server message"
+                    # do something
+        else:
+            print "\nMessage does not match to HMAC"
+    else:
+        print "\nSequence number is not valid!"
+
     main()
 
 #All new messages
@@ -507,6 +609,10 @@ def new_all_msg():
         main()
 
     allmsg = {'type' : 'all', 'sn': seqnumber, 'id' : cid}
+
+    # sign id to send to server
+    print "Signing %s to send to server" % allmsg
+    userSignMessage('id', allmsg)
 
     msg_mac = encapsulate_msg(allmsg)
 
@@ -530,17 +636,27 @@ def new_all_msg():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
+
+    print "Received %s from server" % j
 
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         # check if hmac is correct
         if verify_HMAC(data):
-
             if "error" in j.keys():
                 print "ERROR: ", j['error']
             else:
-                allmsglist = j['result']
-                print "All messages: ", allmsglist
+                if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        allmsglist = j['result']
+                        print "All messages: ", allmsglist
+                    else:
+                        print "Signature is not correct!"
+                else:
+                    print "No signature field in server message"
+                    # do something
         else:
             print "Message does not match to HMAC"
     else:
@@ -592,6 +708,10 @@ def send_msg():
 
     sendmsg = {'type' : 'send', 'sn': seqnumber, 'src' : cid, 'dst' : dstid, 'msg' : msg, 'copy' : copy_msg, 'msgkey' : msg_key, 'copykey' : copy_key}
 
+    # sign msg to send to server
+    print "Signing %s to send to server" % sendmsg
+    userSignMessage('msg', sendmsg)
+
     msg_mac = encapsulate_msg(sendmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
@@ -614,17 +734,28 @@ def send_msg():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
+
+    print "Received %s from server" % j
 
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         # check if hmac is correct
         if verify_HMAC(data):
             if "error" in j.keys():
-                print "\nERROR: ", j['error']
+                print "ERROR: ", j['error']
             else:
-                print "\nSent message successfully!"
-                print "Message ID: ",j['result'][0]
-                print "Receipt ID: ",j['result'][1]
+                if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "\nSent message successfully!"
+                        print "Message ID: ", j['result'][0]
+                        print "Receipt ID: ", j['result'][1]
+                    else:
+                        print "Signature is not correct!"
+                else:
+                    print "No signature field in server message"
+                    # do something
         else:
             print "Message does not match to HMAC"
     else:
@@ -667,6 +798,10 @@ def recv_msg_from_mb():
 
     recvmsg = {'type' : 'recv', 'sn': seqnumber, 'id' : cid, 'msg' : msgid}
 
+    # sign msg to send to server
+    print "Signing %s to send to server" % recvmsg
+    userSignMessage('msg', recvmsg)
+
     msg_mac = encapsulate_msg(recvmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
@@ -689,7 +824,9 @@ def recv_msg_from_mb():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
+
+    print "Received %s from server" % j
 
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         # check if hmac is correct
@@ -697,11 +834,22 @@ def recv_msg_from_mb():
             if "error" in j.keys():
                 print "\nERROR: ", j['error']
             else:
-                recv = ast.literal_eval(j['result'][1])
-                msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
-                print "\nMessage received: ", msgrecv
-                # send receipt
-                send_receipt(json.dumps(j), msgid)
+                if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        recv = ast.literal_eval(j['result'][1])
+                        msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
+                        print "\nMessage received: ", msgrecv
+                        # send receipt
+                        send_receipt(json.dumps(j), msgid)
+                    else:
+                        print "Signature is not correct!"
+                else:
+                    print "No signature field in server message"
+                    # do something
+        else:
+            print "Message does not match to HMAC"
     else:
         print "\nSequence number is not valid!"
 
@@ -731,6 +879,10 @@ def send_receipt(res, msgid):
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
 
     receiptmsg = {'type' : 'receipt', 'sn': seqnumber, 'id' : cid, 'msg' : msgid, 'receipt' : s, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
+
+    #sign receipt to send to server
+    print "Signing %s to send to server" % receiptmsg
+    userSignMessage('receipt', receiptmsg)
 
     msg_mac = encapsulate_msg(receiptmsg)
 
@@ -762,6 +914,10 @@ def status():
 
     statmsg = {'type' : 'status', 'sn': seqnumber, 'id' : cid, 'msg' : msgid}
 
+    # sign id to send to server
+    print "Signing %s to send to server" % statmsg
+    userSignMessage('id', statmsg)
+
     msg_mac = encapsulate_msg(statmsg)
 
     client_socket.send(json.dumps(msg_mac) + "\r\n")
@@ -784,19 +940,33 @@ def status():
 
     p = base64.decodestring(payload)
 
-    j = json.loads(p)
+    j = ast.literal_eval(p)
+
+    print "Received %s from server" % j
 
     if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
         if "error" in j.keys():
             print "\nERROR: ", j['error']
         # check if hmac is correct
-        print "\n"
-        print j
         if verify_HMAC(data):
-            for i in j['result']['receipts']:
-                # verificar se msgid e igual ao id no result
-                if i['id'] == msgid[0]:
-                    print "\n", i['id']
+            if "error" in j.keys():
+                print "\nERROR: ", j['error']
+            else:
+                if set({'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        for i in j['result']['receipts']:
+                            # verificar se msgid e igual ao id no result
+                            #if i['id'] == msgid[0]:
+                            print "\n", i['id']
+                    else:
+                        print "Signature is not correct!"
+                else:
+                    print "No signature field in server message"
+                    # do something
+        else:
+            print "Message does not match to HMAC"
     else:
         print "\nSequence number is not valid!" 
 
@@ -861,7 +1031,7 @@ def read_keys(password):
         (privkey, pubkey) = rsa.create_asymmetric_key()
         rsa.privkey = privkey
         rsa.pubkey = pubkey
-        print "Public Key: %s" % pubkey
+        #print "Public Key: %s" % pubkey
         
         save_key(privkey, filename1[:-4])
         
@@ -911,6 +1081,8 @@ def verify_HMAC(data):
         return True
     else:
         return False
+
+
 
 #Begin
 try:

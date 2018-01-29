@@ -3,6 +3,9 @@ import PyKCS11
 import sys
 from OpenSSL import crypto
 from log import *
+import datetime
+import base64
+from certificates import *
 
 slot = None
 lib = "/usr/local/lib/libpteidpkcs11.so"
@@ -64,3 +67,90 @@ def signWithCC(priv_key, data):
             log(logging.ERROR, str(e.errno))
     return result
 
+def userSignMessage(field, msg):
+    # get signature private key from CC
+    private_key = getCCPrivKey("CITIZEN SIGNATURE KEY")
+
+    # Assinar field para enviar ao servidor
+
+    sig = signWithCC(private_key, str(msg[field]))
+    dt = datetime.datetime.now()
+    s = base64.encodestring(sig)
+
+    # get citizen signature public key certificate
+    pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
+    signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
+
+    msg['cert'] = crypto.dump_certificate(crypto.FILETYPE_PEM, signCert)
+    msg['sign'] = s
+    msg['datetime'] = dt.isoformat()
+
+def serverSignMessage(cert, privkey, field, msg):
+    signature = crypto.sign(privkey, str(msg[field]), "sha256")
+    dt = datetime.datetime.now()
+    s = base64.encodestring(signature)
+
+    msg['sign'] = s
+    msg['datetime'] = dt.isoformat()
+    msg['cert'] = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+
+
+def validateServerSig(cert, field, sig, dt):
+
+    print "Validations: \n"
+    print " - Validating signature"
+    c = crypto.load_certificate(crypto.FILETYPE_PEM, cert)
+    s = sig
+    sig = base64.decodestring(s)
+    try:
+        valid_sig = crypto.verify(c, sig, str(field), "sha256")
+    except:
+        return False
+
+    # validate signature time
+    sigtime_isValid = validateSigTime(c, dt)
+
+    if not sigtime_isValid:
+        print "Invalid signature time"
+        return False
+
+    # verify if certificate is valid
+    print " - Validating certificate and certificate chain"
+    #print c.get_subject()
+    (is_valid, motive) =  validateCertificate(c)
+    if not is_valid:
+        print "Certificate is not valid: %s" % motive
+        return False
+
+    return True
+
+def validateUserSig(cert, field, sig, dt):
+    cert = M2Crypto.X509.load_cert_string(cert)
+    s = sig
+    sig = base64.decodestring(s)
+
+    print "Validations: \n"
+    print " - Validating signature"
+    pub_key = cert.get_pubkey()
+    pub_key.verify_init()
+    pub_key.verify_update(str(field))
+    valid_sig = pub_key.verify_final(sig)
+    if valid_sig != 1:
+        return False
+
+    # verify if certificate is valid
+    print " - Validating certificate and certificate chain"
+    certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_pem())
+    chain = generateCertChain(certificate)
+    valid_cert = verifyChain(chain, certificate)
+    if valid_cert != None:
+        return False
+
+    # validate signature time
+    sigtime_isValid = validateSigTime(certificate, dt)
+
+    if not sigtime_isValid:
+        print "Invalid signature time"
+        return False
+
+    return True

@@ -97,19 +97,15 @@ class Server:
         #print len(s)
 
         #Enviar mensagem para o cliente com o A, g e p para o cliente poder calcular B e K
-        #c.sendResult({'A' : A, 'g' : g, 'p' : c.p, 'sign' : signature, 'cert' : self.cert, 'chain' : self.chain})
-        m = {'type': 'dh', 'A': A, 'g': g, 'p': c.p, 'cert': crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert), 'sign': s, 'datetime': dt.isoformat()}
+
+        #m = {'type': 'dh', 'A': A, 'g': g, 'p': c.p, 'cert': crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert), 'sign': s, 'datetime': dt.isoformat()}
+
+        m = {'type': 'dh', 'A': A, 'g': g, 'p': c.p}
+
+        serverSignMessage(self.cert, self.privkey, 'A', m)
 
         c.sendResult(m)
 
-        #print tmp
-
-        #tmp2 = tmp[:len(tmp) - 1]
-        #tmp3 = tmp2 + ',"cert":' + crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert) + ',"sign":' + s + "}"
-
-        #print tmp3
-
-        #c.bufout += tmp3
 
     def addClient(self, csock, addr):
         """Add a client connecting in csock."""
@@ -165,7 +161,7 @@ class Server:
             if len(data) > 0:
                 reqs = client.parseReqs(data)
                 for req in reqs:
-                    self.server_actions.handleRequest(s, req, self.clients[s])
+                    self.server_actions.handleRequest(s, req, self.clients[s], self.privkey, self.cert)
             else:
                 self.delClient(s)
 

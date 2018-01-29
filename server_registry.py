@@ -107,10 +107,10 @@ class ServerRegistry:
                     logging.exception(
                         "Cannot load user description from " + path)
                     sys.exit(1)
-                print "DESCRIPTION"
-                print description['uuid']
-                print "UUID"
-                print uuid
+                #print "DESCRIPTION"
+                #print description['uuid']
+                #print "UUID"
+                #print uuid
                 if description['uuid'] == uuid:
                     return True
         return False
