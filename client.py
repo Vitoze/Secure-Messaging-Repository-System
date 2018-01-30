@@ -22,6 +22,7 @@ from fileenc_openssl import stretch_key, encrypt_file, decrypt_file
 import re
 import hmac
 import base64
+import getpass
 
 
 #variable initialization
@@ -298,7 +299,7 @@ def request_id():
 
     if rsa == None:
         while True:
-            password = raw_input("\nInsert your password to read your keys: ")
+            password = getpass.getpass("\nInsert your password to read your keys: ")
         
             if password == "":
                 print "\nWrong password! Password is empty!" 
@@ -392,7 +393,7 @@ def create_user_message_box():
         print "\nYour message box already exists!"
         main()
 
-    password = raw_input("\nInsert one password to encrypt your personal files: ")
+    password = getpass.getpass("\nInsert one password to encrypt your personal files: ")
     read_keys(password)
     public_key = base64.encodestring(pubkey)
 
@@ -864,7 +865,7 @@ def recv_msg_from_mb():
 
     if rsa == None:
         while True:
-            password = raw_input("Insert your password to read your keys: ")
+            password = getpass.getpass("Insert your password to read your keys: ")
         
             if password == "":
                 print "\nWrong password! Password is empty!" 
