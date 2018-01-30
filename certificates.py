@@ -92,6 +92,10 @@ def generateCertChain(cert):
             print "Cannot load cert " + new_cert
         cert = new_cert
 
+    store.set_flags(crypto.X509StoreFlags.CRL_CHECK_ALL)
+    store.set_flags(crypto.X509StoreFlags.CHECK_SS_SIGNATURE)
+    store.set_flags(crypto.X509StoreFlags.X509_STRICT)
+
     return store
 
 
@@ -177,7 +181,7 @@ def getCertificateFromName(name):
 
 
 def validateSigTime(cert, dt):
-    print " - Validating signature time"
+    print " - Validating signature time..."
     date1 = datetime.datetime.strptime(cert.get_notAfter(), '%Y%m%d%H%M%SZ')
     date2 = datetime.datetime.strptime(dt, '%Y-%m-%dT%H:%M:%S.%f')
     date3 = datetime.datetime.strptime(cert.get_notBefore(), '%Y%m%d%H%M%SZ')
@@ -186,4 +190,5 @@ def validateSigTime(cert, dt):
         print "Invalid signature time"
         return False
     else:
+        print "...OK!"
         return True

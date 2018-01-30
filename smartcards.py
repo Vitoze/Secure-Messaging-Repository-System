@@ -100,13 +100,14 @@ def serverSignMessage(cert, privkey, field, msg):
 
 def validateServerSig(cert, field, sig, dt):
 
-    print "Validations: \n"
-    print " - Validating signature"
+    print "Validations:"
+    print " - Validating signature..."
     c = crypto.load_certificate(crypto.FILETYPE_PEM, cert)
     s = sig
     sig = base64.decodestring(s)
     try:
         valid_sig = crypto.verify(c, sig, str(field), "sha256")
+        print "...OK!"
     except:
         return False
 
@@ -118,13 +119,13 @@ def validateServerSig(cert, field, sig, dt):
         return False
 
     # verify if certificate is valid
-    print " - Validating certificate and certificate chain"
+    print " - Validating certificate and certificate chain..."
     #print c.get_subject()
     (is_valid, motive) =  validateCertificate(c)
     if not is_valid:
         print "Certificate is not valid: %s" % motive
         return False
-
+    print "...OK!"
     return True
 
 def validateUserSig(cert, field, sig, dt):
