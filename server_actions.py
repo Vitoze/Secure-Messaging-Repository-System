@@ -518,7 +518,7 @@ class ServerActions:
             return
 
         # verify if signature is valid
-        valid_sig = validateUserSig(data['cert'], data['receipt'], data['sign'], data['datetime'])
+        valid_sig = validateUserSig(data['cert'], data['sn'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
             # sign error msg to send to client

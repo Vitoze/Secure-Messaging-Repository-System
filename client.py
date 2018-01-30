@@ -246,7 +246,7 @@ def printMenu():
     print '5 - List all messages received'
     print '6 - Send message to a user'
     print '7 - Receive a message from message box'
-    print '8 - List messages sent and their receipts'
+    print '8 - Check message status'
     print '9 - Exit from aplication'
     print '******************************************************'
 
@@ -982,11 +982,13 @@ def send_receipt(res, msgid):
     pub_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
     signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_cert.as_der())
 
-    receiptmsg = {'type' : 'receipt', 'sn': seqnumber, 'id' : cid, 'msg' : msgid, 'receipt' : s, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
+    #receiptmsg = {'type' : 'receipt', 'sn': seqnumber, 'id' : cid, 'msg' : msgid, 'receipt' : s,'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
+    t = {'assi' : s, 'payload' : res, 'cert' : crypto.dump_certificate(crypto.FILETYPE_PEM, signCert), 'datetime' : dt.isoformat()}
+    receiptmsg = {'type' : 'receipt', 'sn': seqnumber, 'id' : cid, 'msg' : msgid, 'receipt' : json.dumps(t)}
 
     #sign receipt to send to server
     print "Signing %s to send to server" % receiptmsg
-    userSignMessage('receipt', receiptmsg)
+    userSignMessage('sn', receiptmsg)
 
     msg_mac = encapsulate_msg(receiptmsg)
 
@@ -1069,8 +1071,36 @@ def status():
                     if valid_sig:
                         for i in j['result']['receipts']:
                             # verificar se msgid e igual ao id no result
-                            #if i['id'] == msgid[0]:
-                            print "\n", i['id']
+                            if i['id'] == msgid[0]:
+                                #print "\n", i['id']
+                                #validate j[result][receipt]
+                                l = json.loads(i['receipt'])
+                                r = l['assi']
+                                p = l['payload']
+                                c = l['cert']
+                                d = l['datetime']
+                                valid_sig = validateUserSig(c, p, r, d)
+                                if valid_sig:
+                                    #validate server signature
+                                    o = json.loads(p)
+                                    valid_sig = validateServerSig(o['cert'], o['sn'], o['sign'], o['datetime'])
+                                    if valid_sig:
+                                        print "Receipt %s is valid: %s" % (i['id'], i)
+                                    else:
+                                        print "Receipt server signature is not correct!"
+                                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                                        client_socket.close()
+                                        connectToServer()
+                                else:
+                                    print "Receipt signature is not correct!"
+                                    print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                                    client_socket.close()
+                                    connectToServer()
+                            else:
+                                print "Receipt id does not match to the receiver of the sent message!"
+                                print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                                client_socket.close()
+                                connectToServer()        
                     else:
                         print "Signature is not correct!"
                         print "\nCommunication may be compromised.\nClosing connection and opening a new one."
