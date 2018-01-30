@@ -45,9 +45,9 @@ def prime_root(value):
 	#totient = tot(value) 
 	roots = [] 
 	#exp = len(totient)
-
+	print value
 	(exp, totient) = phi(value)
-
+	print totient
 	for x in totient: 
 		y = 1 
 		while pow(x, y, value) != 1:
@@ -63,4 +63,14 @@ def prime_root(value):
 #print primes(2000)
 #print random.choice(primes(2000))
 
-
+a = primes(200)
+for i in a:
+	print i
+	print "\n"
+	c = i
+	while c == 2:
+		c = random.choice(primes(200))
+	print c
+	print "\n"
+	print random.choice(prime_root(c))
+	print "\n"

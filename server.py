@@ -84,6 +84,8 @@ class Server:
         #Inicializar variaveis
         c.a = random.randint(2, 30)
         c.p = random.choice(primes(200))
+        while c.p == 2:
+            c.p = random.choice(primes(200))
         g = random.choice(prime_root(c.p))
 
         #Calcular A = g^a mod p
