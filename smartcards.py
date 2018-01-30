@@ -19,6 +19,9 @@ def detectCardReader():
 
     if len(slots) != 0:
         slot =  slots[0]
+    else:
+        print "Please, insert your card in the card reader"
+        exit()
 
     return slot
 

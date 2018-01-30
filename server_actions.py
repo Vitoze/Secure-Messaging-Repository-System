@@ -53,12 +53,7 @@ class ServerActions:
 
             #significa que ainda nao se estabeleceu a chave de sessao
             if req['type'] == 'dh':
-                if req['type'] in self.messageTypes:
                     self.messageTypes[req['type']](req, client, privkey, server_cert)
-                else:
-                    log(logging.ERROR, "Invalid message type: " +
-                        str(req['type']) + " Should be one of: " + str(self.messageTypes.keys()))
-                    client.sendResult(self.encapsulate_msg({"error": "unknown request"}, client))
             else:
                 if not req['type'] == 'secure':
                     log(logging.ERROR, "Invalid message format from client")
@@ -66,12 +61,25 @@ class ServerActions:
 
                 if not set({'type', 'payload', 'hmac'}).issubset(set(req.keys())):
                     log(logging.ERROR, "Insecure message from %s!" % client)
-                    client.sendResult(self.encapsulate_msg({"error": "Please ensure your message autentication and integrity"}, client))
+                    # sign error msg to send to client
+                    error_msg = {"error": "Please ensure your message autentication and integrity"}
+                    serverSignMessage(server_cert, privkey, 'error', error_msg)
+                    client.sendResult(self.encapsulate_msg(error_msg, client))
                     return
 
-                #try:
-                info = base64.decodestring(req['payload'])
-                data = json.loads(info)
+                info = None
+                data = None
+
+                try:
+                    info = base64.decodestring(req['payload'])
+                    data = json.loads(info)
+                except:
+                    log(logging.ERROR, "Invalid field type from client")
+                    # sign error msg to send to client
+                    error_msg = {"error": "payload can not be processed", "sn": data['sn'] + 1}
+                    serverSignMessage(server_cert, privkey, 'error', error_msg)
+                    client.sendResult(self.encapsulate_msg(error_msg, client))
+                    return
 
                 #check if hmac is correct
                 h = hmac.new(hashlib.sha256(str(client.skey)).digest(), '', hashlib.sha1)
@@ -86,15 +94,17 @@ class ServerActions:
                     else:
                         log(logging.ERROR, "Invalid message type: " +
                             str(data['type']) + " Should be one of: " + str(self.messageTypes.keys()))
-                        client.sendResult(self.encapsulate_msg({"error": "unknown request"}, client))
+                        # sign error msg to send to client
+                        error_msg = {"error": "unknown request"}
+                        serverSignMessage(server_cert, privkey, 'error', error_msg)
+                        client.sendResult(self.encapsulate_msg(error_msg, client))
                 else:
                     log(logging.ERROR, "Message Authentication from %s failed!" % client)
-                    client.sendResult(self.encapsulate_msg({"error": "Please ensure your message autentication and integrity"}, client))
-                '''
-                except:
-                    log(logging.ERROR, "Invalid field type from client")
-                    return
-                '''
+                    # sign error msg to send to client
+                    error_msg = {"error": "Please ensure your message autentication and integrity"}
+                    serverSignMessage(server_cert, privkey, 'error', error_msg)
+                    client.sendResult(self.encapsulate_msg(error_msg, client))
+
         except Exception, e:
             logging.exception("Could not handle request")
 
@@ -104,25 +114,37 @@ class ServerActions:
         if 'uuid' not in data.keys():
             log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if self.registry.uuidExists(data['uuid']):
             log(logging.ERROR, "User already exists: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "uuid already exists", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "uuid already exists", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['uuid'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         me = self.registry.addUser(data)
@@ -146,23 +168,30 @@ class ServerActions:
             user = int(data['id'])
             userStr = "user%d" % user
             if not self.registry.userExists(user):
-                log(logging.ERROR,
-                    "Unknown id: " + json.dumps(data))
-                client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+                log(logging.ERROR,"Unknown id: " + json.dumps(data))
+                # sign error msg to send to client
+                error_msg = {"error": "Unknown id", "sn": data['sn']+1}
+                serverSignMessage(server_cert, privkey, 'error', error_msg)
+                client.sendResult(self.encapsulate_msg(error_msg, client))
                 return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['sn'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(
-                self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
 
@@ -177,6 +206,8 @@ class ServerActions:
         # sign result to send to client
         serverSignMessage(server_cert, privkey, 'sn', msg)
 
+        logging.info("Send %s to %s" % (msg, client))
+
         client.sendResult(self.encapsulate_msg(msg, client))
 
     def processNew(self, data, client, privkey, server_cert):
@@ -189,26 +220,38 @@ class ServerActions:
         if user < 0:
             log(logging.ERROR,
                 "No valid \"id\" field in \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not client.id == user:
             log(logging.ERROR,
                 "Wrong client id for \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['id'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         msg = {"result":  self.registry.userNewMessages(user), "sn": data['sn']+1}
@@ -216,7 +259,7 @@ class ServerActions:
         logging.info("Send %r to %s" % (client, msg))
 
         # sign result to send to client
-        serverSignMessage(server_cert, privkey,'result', msg)
+        serverSignMessage(server_cert, privkey,'sn', msg)
 
         client.sendResult(self.encapsulate_msg(msg, client))
 
@@ -230,26 +273,38 @@ class ServerActions:
         if user < 0:
             log(logging.ERROR,
                 "No valid \"id\" field in \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not client.id == user:
             log(logging.ERROR,
                 "Wrong client id for \"new\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['id'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         msg = {"result": [self.registry.userAllMessages(user), self.registry.userSentMessages(user)], "sn": data['sn']+1}
@@ -257,7 +312,7 @@ class ServerActions:
         logging.info("Send %r to %s" % (client, msg))
 
         # sign result to send to client
-        serverSignMessage(server_cert, privkey, 'result', msg)
+        serverSignMessage(server_cert, privkey, 'sn', msg)
 
         client.sendResult(self.encapsulate_msg(msg, client))
 
@@ -267,7 +322,11 @@ class ServerActions:
         if not set(data.keys()).issuperset(set({'src', 'dst', 'msg', 'copy', 'msgkey', 'copykey'})):
             log(logging.ERROR,
                 "Badly formated \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            return
 
         srcId = int(data['src'])
         dstId = int(data['dst'])
@@ -277,39 +336,57 @@ class ServerActions:
         if not client.id == srcId:
             log(logging.ERROR,
                 "Wrong client id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not self.registry.userExists(srcId):
             log(logging.ERROR,
                 "Unknown source id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong parameters", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not self.registry.userExists(dstId):
             log(logging.ERROR,
                 "Unknown destination id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong parameters", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if srcId == dstId:
             log(logging.ERROR,
                 "Wrong client id for \"send\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "You can not send a message for yourself!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "You can not send a message for yourself!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['msg'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # Save message and copy
@@ -330,7 +407,11 @@ class ServerActions:
         if not set({'id', 'msg'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"recv\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            return
 
         fromId = int(data['id'])
         msg = str(data['msg'])
@@ -338,32 +419,47 @@ class ServerActions:
         if not client.id == fromId:
             log(logging.ERROR,
                 "Wrong client id for \"recv\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not self.registry.userExists(fromId):
             log(logging.ERROR,
                 "Unknown source id for \"recv\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong parameters", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not self.registry.messageExists(fromId, msg):
             log(logging.ERROR,
                 "Unknown source msg for \"recv\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong parameters", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['msg'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # Read message
@@ -385,7 +481,11 @@ class ServerActions:
         if not set({'id', 'msg', 'receipt', 'cert', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"receipt\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong request format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong request format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            return
 
         fromId = int(data["id"])
         msg = str(data['msg'])
@@ -394,25 +494,37 @@ class ServerActions:
         if not client.id == fromId:
             log(logging.ERROR,
                 "Wrong client id for \"receipt\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not self.registry.messageWasRed(str(fromId), msg):
             log(logging.ERROR, "Unknown, or not yet red, message for \"receipt\" request " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong parameters", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['receipt'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         self.registry.storeReceipt(fromId, msg, receipt)
@@ -423,7 +535,11 @@ class ServerActions:
         if not set({'id', 'msg'}).issubset(set(data.keys())):
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            return
         
         fromId = int(data['id'])
         msg = str(data["msg"])
@@ -431,25 +547,37 @@ class ServerActions:
         if not client.id == fromId:
             log(logging.ERROR,
                 "Wrong client id for \"status\" message: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "Your client id is not correct!", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
-        if(not self.registry.copyExists(fromId, msg)):
+        if not self.registry.copyExists(fromId, msg):
             log(logging.ERROR, "Unknown message for \"status\" request: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong parameters", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong parameters", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['id'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # Read message
@@ -461,7 +589,7 @@ class ServerActions:
         logging.info("Send %r to %s" % (client, msg))
 
         # sign result to send to client
-        serverSignMessage(server_cert, privkey, 'result', msg)
+        serverSignMessage(server_cert, privkey, 'sn', msg)
 
         client.sendResult(self.encapsulate_msg(msg, client))
 
@@ -513,8 +641,10 @@ class ServerActions:
             valid_sig = validateUserSig(data['cert'], data['B'], data['sign'], data['datetime'])
             if not valid_sig:
                 log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-                client.sendResult(
-                    {"error": "signature does not match", "sn": data['sn'] + 1}, client)
+                # sign error msg to send to client
+                error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+                serverSignMessage(server_cert, privkey, 'error', error_msg)
+                client.sendResult(error_msg, client)
                 return
 
             msg_ok = {'ok' : "not ok"}
@@ -543,7 +673,10 @@ class ServerActions:
         else:
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
-            client.sendResult({"error": "wrong message format"})
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format"}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(error_msg)
 
     def processRequest(self, data, client, privkey, server_cert):
 
@@ -552,20 +685,29 @@ class ServerActions:
         if 'uuid' not in data.keys():
             log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "wrong message format", "sn": data['sn']+1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "wrong message format", "sn": data['sn']+1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if not set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             log(logging.ERROR, "No signature field in message: " +
                 json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature is missing", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature is missing", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['uuid'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
-            client.sendResult(self.encapsulate_msg({"error": "signature does not match", "sn": data['sn'] + 1}, client))
+            # sign error msg to send to client
+            error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
         if self.registry.uuidExists(data['uuid']):
