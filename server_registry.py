@@ -161,10 +161,13 @@ class ServerRegistry:
 
         if 'type' in description.keys():
             del description['type']
+        d = {}
+        d['uuid'] = description['uuid']
+        d['pubkey'] = description['pubkey']
 
-        log(logging.DEBUG, "add user \"%s\": %s" % (uid, description))
+        log(logging.DEBUG, "add user \"%s\": %s" % (uid, d))
 
-        user = UserDescription(uid, description)
+        user = UserDescription(uid, d)
         self.users[uid] = user
 
         for path in [self.userMessageBox(uid), self.userReceiptBox(uid)]:
@@ -178,7 +181,8 @@ class ServerRegistry:
         try:
             path = os.path.join(MBOXES_PATH, str(uid), DESC_FILENAME)
             log(logging.DEBUG, "add user description " + path)
-            self.saveOnFile(path, json.dumps(description))
+            
+            self.saveOnFile(path, json.dumps(d))
         except:
             logging.exception("Cannot create description file " + path)
             sys.exit(1)

@@ -855,7 +855,7 @@ def send_msg():
 
 #Receive nessage from a user message box
 def recv_msg_from_mb():
-    global cid, rsa, allmsglist, password
+    global cid, rsa, password
 
     seqnumber = random.randint(0, 1500)
 
@@ -938,10 +938,12 @@ def recv_msg_from_mb():
                         recv = ast.literal_eval(j['result'][1])
                         msgrecv = AESCipher(None, rsa.decrypt_priv(recv['msgkey'])).decrypt(recv['msg'])
                         print "\nMessage received: ", msgrecv
+                        if not msgid.startswith("_"):
+                            print "Now your message id is _%s" % msgid 
                         # send receipt
                         send_receipt(json.dumps(j), msgid)
                     else:
-                        print "Signature is not correct!"
+                        print "This signature is not correct!"
                         print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                         client_socket.close()
                         connectToServer()

@@ -45,9 +45,9 @@ def prime_root(value):
 	#totient = tot(value) 
 	roots = [] 
 	#exp = len(totient)
-	print value
+
 	(exp, totient) = phi(value)
-	print totient
+
 	for x in totient: 
 		y = 1 
 		while pow(x, y, value) != 1:

@@ -397,7 +397,7 @@ class ServerActions:
         logging.info("Send %r to %s" % (client, msg))
 
         # sign result to send to client
-        serverSignMessage(server_cert, privkey, 'result', msg)
+        serverSignMessage(server_cert, privkey, 'sn', msg)
 
         client.sendResult(self.encapsulate_msg(msg, client))
 
@@ -466,12 +466,12 @@ class ServerActions:
 
         response = self.registry.recvMessage(fromId, msg)
 
-        msg = {"result": response, "time" : datetime.datetime.now().isoformat(), "sn": data['sn']+1}
+        msg = {"result": response, "sn": data['sn']+1}
 
-        logging.info("Send %r to %s" % (client, msg))
+        logging.info("Send %s to %s" % (msg, client))
 
         # sign result to send to client
-        serverSignMessage(server_cert, privkey, 'result', msg)
+        serverSignMessage(server_cert, privkey, 'sn', msg)
 
         client.sendResult(self.encapsulate_msg(msg, client))
 
