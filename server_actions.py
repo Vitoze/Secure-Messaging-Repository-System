@@ -111,8 +111,8 @@ class ServerActions:
     def processCreate(self, data, client, privkey, server_cert):
         log(logging.DEBUG, "%s" % json.dumps(data))
 
-        if 'uuid' not in data.keys():
-            log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
+        if 'uuid_cert' not in data.keys():
+            log(logging.ERROR, "No \"uuid\" certificate in \"create\" message: " +
                 json.dumps(data))
             # sign error msg to send to client
             error_msg = {"error": "wrong message format", "sn": data['sn']+1}
@@ -120,7 +120,28 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
-        if self.registry.uuidExists(data['uuid']):
+        # verify if authentication certificate correspond to client
+        #crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_pem())
+        uuid_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['uuid_cert'])
+        if uuid_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Authentication certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {
+                "error": "Authentication certificate does not correspond to client associated to this socket",
+                "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
+        #print uuid_cert.get_subject().__getattr__('CN')
+        uuid = self.calculateUuid(data['uuid_cert'])
+        #print type(uuid)
+        #print uuid
+
+        if self.registry.uuidExists(uuid):
             log(logging.ERROR, "User already exists: " + json.dumps(data))
             # sign error msg to send to client
             error_msg = {"error": "uuid already exists", "sn": data['sn']+1}
@@ -151,7 +172,7 @@ class ServerActions:
             return
 
         # verify if signature is valid
-        valid_sig = validateUserSig(data['cert'], data['uuid'], data['sign'], data['datetime'])
+        valid_sig = validateUserSig(data['cert'], data['uuid_cert'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
             # sign error msg to send to client
@@ -163,7 +184,7 @@ class ServerActions:
             client.socket.close()
             return
 
-        me = self.registry.addUser(data)
+        me = self.registry.addUser(data, base64.encodestring(uuid))
 
         msg = {"result": me.id, "sn": data['sn']+1}
 
@@ -800,8 +821,8 @@ class ServerActions:
 
         log(logging.DEBUG, "%s" % json.dumps(data))
 
-        if 'uuid' not in data.keys():
-            log(logging.ERROR, "No \"uuid\" field in \"create\" message: " +
+        if 'uuid_cert' not in data.keys():
+            log(logging.ERROR, "No \"uuid\" certificate in message: " +
                 json.dumps(data))
             # sign error msg to send to client
             error_msg = {"error": "wrong message format", "sn": data['sn']+1}
@@ -818,21 +839,22 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
-        # verify if certificate correspond to client
+        # verify if signature certificate correspond to client
         client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
         if client_cert.get_subject().__getattr__('CN') != client.name:
             log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
             # sign error msg to send to client
-            error_msg = {"error": "Certificate does not correspond to client associated to this socket", "sn": data['sn'] + 1}
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
-            #closing connection to client
+            # closing connection to client
             log(logging.ERROR, "Connection may be compromised. Closing connection.")
             client.socket.close()
             return
 
         # verify if signature is valid
-        valid_sig = validateUserSig(data['cert'], data['uuid'], data['sign'], data['datetime'])
+        valid_sig = validateUserSig(data['cert'], data['uuid_cert'], data['sign'], data['datetime'])
         if not valid_sig:
             log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
             # sign error msg to send to client
@@ -844,8 +866,25 @@ class ServerActions:
             client.socket.close()
             return
 
-        if self.registry.uuidExists(data['uuid']):
-            client.id = self.registry.getUserId(data['uuid'])
+        # verify if authentication certificate correspond to client
+        uuid_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['uuid_cert'])
+        if uuid_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Authentication certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {
+                "error": "Authentication certificate does not correspond to client associated to this socket",
+                "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
+        uuid = self.calculateUuid(data['uuid_cert'])
+
+        if self.registry.uuidExists(base64.encodestring(uuid)):
+            client.id = self.registry.getUserId(base64.encodestring(uuid))
         else:
             log(logging.ERROR, "Uuid does not exists")
             # sign error msg to send to client
@@ -862,6 +901,15 @@ class ServerActions:
         logging.info("Send %r to %s" % (client, msg))
 
         client.sendResult(self.encapsulate_msg(msg, client))
+
+    def calculateUuid(self, cert_uuid):
+        uuid = None
+        if cert_uuid is not None:
+            try:
+                uuid = hashlib.sha256(cert_uuid).digest()
+            except Exception as e:
+                print e
+        return uuid
 
     def encapsulate_msg(self, msg, client):
         # convert msg to base64

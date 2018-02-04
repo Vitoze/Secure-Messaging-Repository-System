@@ -257,11 +257,15 @@ def request_id():
                     
         read_keys(password)
 
-    msg = {'type' : 'request', 'sn' : seqnumber, 'uuid' : base64.encodestring(getUuid())}
+    uuidCert = getCertificate("CITIZEN AUTHENTICATION CERTIFICATE")
+
+    msg = {'type' : 'request', 'sn': seqnumber, 'uuid_cert': uuidCert.as_pem()}
+
+    #msg = {'type' : 'request', 'sn' : seqnumber, 'uuid' : base64.encodestring(getUuid())}
 
     #sign uuid to send to server
     print "Signing %s to send to server" % msg
-    userSignMessage('uuid', msg)
+    userSignMessage('uuid_cert', msg)
 
     msg_mac = encapsulate_msg(msg)
 
@@ -365,16 +369,32 @@ def create_user_message_box():
     read_keys(password)
     public_key = base64.encodestring(pubkey)
 
-    uuid = getUuid()
-    uuid64 = base64.encodestring(uuid)
+    #uuid = getUuid()
+    #uuid64 = base64.encodestring(uuid)
 
-    if uuid is not None:
+    uuidCert = getCertificate("CITIZEN AUTHENTICATION CERTIFICATE")
 
-        msg = {'type': 'create', 'sn': seqnumber, 'uuid': uuid64, 'pubkey': public_key}
+    '''
+    print uuidCert.as_pem()
+
+    print type(uuidCert.as_pem())
+
+    blabla = getUuid()
+
+    print blabla
+
+    print type(blabla)
+    '''
+
+    if uuidCert is not None:
+
+        #msg = {'type': 'create', 'sn': seqnumber, 'uuid': uuid64, 'pubkey': public_key}
+        #msg = {'type': 'create', 'sn': seqnumber, 'uuid_cert': uuidCert.as_pem(), 'pubkey': public_key}
+        msg = {'type': 'create', 'sn': seqnumber, 'uuid_cert': uuidCert.as_pem(), 'pubkey': public_key}
 
         # sign uuid to send to server
         print "Signing %s to send to server" % msg
-        userSignMessage('uuid', msg)
+        userSignMessage('uuid_cert', msg)
 
         msg_mac = encapsulate_msg(msg)
 

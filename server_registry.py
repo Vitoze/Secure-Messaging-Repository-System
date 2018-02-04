@@ -5,6 +5,7 @@ import logging
 import re
 import json
 import time
+from OpenSSL import crypto
 
 sys.tracebacklimit = 30
 
@@ -107,10 +108,8 @@ class ServerRegistry:
                     logging.exception(
                         "Cannot load user description from " + path)
                     sys.exit(1)
-                #print "DESCRIPTION"
-                #print description['uuid']
-                #print "UUID"
-                #print uuid
+                print type(description['uuid'])
+                print type(uuid)
                 if description['uuid'] == uuid:
                     return True
         return False
@@ -152,7 +151,30 @@ class ServerRegistry:
                     return user
         return None
 
-    def addUser(self, description):
+    def getUserSN(self, uid):
+        for entryname in os.listdir(MBOXES_PATH):
+
+            if os.path.isdir(os.path.join(MBOXES_PATH, entryname)):
+                uid = 0
+                try:
+                    uid = int(entryname)
+                except:
+                    continue
+
+                path = os.path.join(MBOXES_PATH, entryname, DESC_FILENAME)
+
+                description = None
+                try:
+                    with open(path) as f:
+                        description = json.loads(f.read())
+                except:
+                    logging.exception(
+                        "Cannot load user description from " + path)
+                    sys.exit(1)
+                return description['serial_n']
+        return None
+
+    def addUser(self, description, uuid):
         uid = 1
 
         #get last id created
@@ -161,8 +183,12 @@ class ServerRegistry:
 
         if 'type' in description.keys():
             del description['type']
+
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, description['uuid_cert'])
+        sn = cert.get_serial_number()
         d = {}
-        d['uuid'] = description['uuid']
+        d['serial_n'] = sn
+        d['uuid'] = uuid
         d['pubkey'] = description['pubkey']
 
         log(logging.DEBUG, "add user \"%s\": %s" % (uid, d))
