@@ -42,14 +42,14 @@ global allmsglist
 allmsglist = []
 global password
 password = ""
-global server_cert
-server_cert = None
+global server_name
+server_name = ""
 global client_socket
 client_socket= None
 
 
 def connectToServer():
-    global client_socket, client_name, privkey, pubkey, K, server_cert, cid, users_list, allmsglist
+    global client_socket, client_name, privkey, pubkey, K, server_name, cid, users_list, allmsglist
 
     pubkey = None
     cid = -1
@@ -124,7 +124,7 @@ def connectToServer():
                 continue
 
     if set({'sn'}).issubset(set(data.keys())) and data['sn'] == seqnumber + 1:
-        if set({'ok','cert', 'sign', 'datetime'}).issubset(set(data.keys())):
+        if set({'ok', 'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
             # verify if signature is valid
             valid_sig = validateServerSig(data['cert'], data['ok'], data['sign'], data['datetime'])
             if valid_sig:
@@ -135,8 +135,8 @@ def connectToServer():
                 elif data['ok'] == "ok":
                     msg = {'type': 'dh', 'ok': "ok"}
 
-
                     server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+                    server_name = server_cert.get_subject().__getattr__('CN')
 
                     # sign ok to send to server
                     print "Signing %s to send to server" % msg
@@ -175,57 +175,6 @@ def connectToServer():
         client_socket.close()
         connectToServer()
 
-    '''
-            if set({'ok', 'cert', 'sign', 'datetime', 'sn'}).issubset(set(data.keys())):
-                #verificar se os conteudos dos campos sao str
-                if(isinstance(data['ok'], str)):
-                    #verificar se os conteudos dos campos nao sao nulos
-                    if(data['ok'] != ""):
-                        break
-            elif "error" in data.keys():
-                if set({'cert', 'sign', 'datetime', 'sn'}).issubset(set(data.keys())):
-                    # verify if signature is valid
-                    valid_sig = validateServerSig(data['cert'], data['ok'], data['sign'], data['datetime'])
-                    if valid_sig:
-                        print "ERROR: ", data['error']
-
-                else:
-                    print "Message received is not in the expected format."
-                    client_socket.close()
-                    connectToServer()
-            else:
-                print "Message received is not in the expected format."
-                client_socket.close()
-                connectToServer()
-
-    print "Received %s from server" % data
-
-    if set({'sn'}).issubset(set(data.keys())) and data['sn'] == seqnumber+1:
-        if set({'cert', 'sign', 'datetime'}).issubset(set(data.keys())):
-            # verify if signature is valid
-
-            valid_sig = validateServerSig(data['cert'], data['ok'], data['sign'], data['datetime'])
-
-            if valid_sig:
-                if data['ok'] == "not ok":
-                    exit()
-
-                msg = {'type': 'dh', 'ok': "ok"}
-
-                #sign ok to send to server
-                print "Signing %s to send to server" % msg
-                userSignMessage('ok', msg)
-
-                print "Sending message to server: %s" % msg
-                client_socket.send(json.dumps(msg) + "\r\n")
-            else:
-                print "Signature is not correct!"
-        else:
-            print "No signature field in server message"
-            # do something
-    else:
-        print "\nSequence number is not valid!"
-    '''
     print '...Done'
     print 'Welcome client',client_name,'!\n'
 
@@ -285,7 +234,7 @@ def process(op):
 
 #Request id
 def request_id():
-    global cid, rsa, K, password, server_cert
+    global cid, rsa, K, password, server_name
 
     seqnumber = random.randint(0, 1500)
 
@@ -346,29 +295,48 @@ def request_id():
 
             # check if hmac is correct
             if verify_HMAC(data):
-
                 if set({'sn'}).issubset(set(j.keys())) and j['sn'] == seqnumber+1:
-                    if set({'id', 'sign', 'datetime'}).issubset(set(j.keys())):
-                        # verify if signature is valid
-                        valid_sig = validateServerSig(crypto.dump_certificate(crypto.FILETYPE_PEM, server_cert), j['id'], j['sign'], j['datetime'])
-                        if valid_sig:
-                            if j['id'] == None:
-                                print '\nUser not created yet! Please, create a message box!'
+                    if set({'id', 'sign', 'cert', 'datetime'}).issubset(set(j.keys())):
+                        server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                        if server_cert.get_subject().__getattr__('CN') == server_name:
+                            # verify if signature is valid
+                            valid_sig = validateServerSig(j['cert'], j['id'], j['sign'], j['datetime'])
+                            if valid_sig:
+                                if j['id'] == None:
+                                    print '\nUser not created yet! Please, create a message box!'
+                                else:
+                                    cid = int(j['id'])
+                                    print '\nYour client ID is', cid
                             else:
-                                cid = int(j['id'])
-                                print '\nYour client ID is', cid
+                                print "Signature is not correct!"
+                                print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                                client_socket.close()
+                                connectToServer()
                         else:
-                            print "Signature is not correct!"
-                            print "\nCommunication may be compromised.\nClosing connection.\nGood bye!"
+                            print "Certificate does not correspond to server"
+                            print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                             client_socket.close()
                             connectToServer()
 
-                    elif set({'error', 'sign', 'datetime'}).issubset(set(j.keys())):
-                        # verify if signature is valid
-                        valid_sig = validateServerSig(crypto.dump_certificate(crypto.FILETYPE_PEM, server_cert), j['error'], j['sign'], j['datetime'])
-                        if valid_sig:
-                            print "ERROR: ", j['error']
-                            # do nothing
+                    elif set({'error', 'sign', 'cert', 'datetime'}).issubset(set(j.keys())):
+                        #verify if certificate correspond to server
+                        server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                        if server_cert.get_subject().__getattr__('CN') == server_name:
+                            # verify if signature is valid
+                            valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                            if valid_sig:
+                                print "ERROR: ", j['error']
+                                # do
+                            else:
+                                print "Signature is not correct!"
+                                print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                                client_socket.close()
+                                connectToServer()
+                        else:
+                            print "Certificate does not correspond to server"
+                            print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                            client_socket.close()
+                            connectToServer()
                     else:
                         print "Invalid Message from server"
                 else:
@@ -399,10 +367,7 @@ def create_user_message_box():
 
     uuid = getUuid()
     uuid64 = base64.encodestring(uuid)
-    '''
-    pub_key_cert = getCertificate("CITIZEN SIGNATURE CERTIFICATE")
-    signCert = crypto.load_certificate(crypto.FILETYPE_ASN1, pub_key_cert.as_der())
-    '''
+
     if uuid is not None:
 
         msg = {'type': 'create', 'sn': seqnumber, 'uuid': uuid64, 'pubkey': public_key}
@@ -445,7 +410,10 @@ def create_user_message_box():
             # check if hmac is correct
             if verify_HMAC(data):
                 if set({'error', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                    # verify if signature is valid
+                    #verify if certificate correspond to server
+                    server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                    if server_cert.get_subject().__getattr__('CN') == server_name:
+                        # verify if signature is valid
                         valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
                         if valid_sig:
                             print "ERROR: ", j['error']
@@ -456,8 +424,16 @@ def create_user_message_box():
                             print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                             client_socket.close()
                             connectToServer()
+                    else:
+                        print "Certificate does not correspond to server."
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
 
                 elif set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                    # verify if certificate correspond to server
+                    server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                    if server_cert.get_subject().__getattr__('CN') == server_name:
                         # verify if signature is valid
                         valid_sig = validateServerSig(j['cert'], j['result'], j['sign'], j['datetime'])
                         if valid_sig:
@@ -469,6 +445,11 @@ def create_user_message_box():
                             print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                             client_socket.close()
                             connectToServer()
+                    else:
+                        print "Certificate does not correspond to server."
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
                     print "Invalid message from server"
                     deleteDirectory()
@@ -541,35 +522,51 @@ def list_users_msg():
         # check if hmac is correct
         if verify_HMAC(data):
             if set({'error', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
-                if valid_sig:
-                    print "ERROR: ", j['error']
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "ERROR: ", j['error']
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
             elif set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'],j['sn'], j['sign'], j['datetime'])
-                if valid_sig:
-                    lista = j['result']
-                    users_list = {}
-                    if nid == 0:
-                        for coiso in lista:
-                            users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'],j['sn'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        lista = j['result']
+                        users_list = {}
+                        if nid == 0:
+                            for coiso in lista:
+                                users_list[str(coiso.keys()[0])] = coiso[str(coiso.keys()[0])]
+                        else:
+                            for coiso in lista:
+                                users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
+
+                        print users_list
+
+                        if set(users_list.keys()).issuperset(set({str(cid)})):
+                            if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
+                                pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
                     else:
-                        for coiso in lista:
-                            users_list[str(coiso[str(coiso.keys()[1])])] = coiso[str(coiso.keys()[0])]
-
-                    print users_list
-
-                    if set(users_list.keys()).issuperset(set({str(cid)})):
-                        if set(users_list[str(cid)].keys()).issuperset(set({'pubkey'})):
-                            pubkey = base64.decodestring(users_list[str(cid)]['pubkey'])
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
@@ -631,23 +628,39 @@ def new_msg():
         # check if hmac is correct
         if verify_HMAC(data):
             if set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
-                if valid_sig:
-                    newmsglist = j['result']
-                    print "List: ", newmsglist
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        newmsglist = j['result']
+                        print "List: ", newmsglist
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
             elif set({'error', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
-                if valid_sig:
-                    print "ERROR: ", j['error']
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "ERROR: ", j['error']
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
@@ -710,16 +723,27 @@ def new_all_msg():
         # check if hmac is correct
         if verify_HMAC(data):
             if set({'error', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
-                if valid_sig:
-                    print "ERROR: ", j['error']
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "ERROR: ", j['error']
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
             elif set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
                     # verify if signature is valid
                     valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
                     if valid_sig:
@@ -730,6 +754,11 @@ def new_all_msg():
                         print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                         client_socket.close()
                         connectToServer()
+                else:
+                    print "Certificate does not correspond to server."
+                    print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                    client_socket.close()
+                    connectToServer()
             else:
                 print "Message was not in the expected format"
         else:
@@ -820,16 +849,27 @@ def send_msg():
         # check if hmac is correct
         if verify_HMAC(data):
             if set({'error','cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
-                if valid_sig:
-                    print "ERROR: ", j['error']
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "ERROR: ", j['error']
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
             elif set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
                     # verify if signature is valid
                     valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
                     if valid_sig:
@@ -841,6 +881,11 @@ def send_msg():
                         print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                         client_socket.close()
                         connectToServer()
+                else:
+                    print "Certificate does not correspond to server."
+                    print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                    client_socket.close()
+                    connectToServer()
             else:
                 print "Message was not in the expected format"
         else:
@@ -922,16 +967,27 @@ def recv_msg_from_mb():
         # check if hmac is correct
         if verify_HMAC(data):
             if set({'error','cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
-                if valid_sig:
-                    print "\nERROR: ", j['error']
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "\nERROR: ", j['error']
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
             elif set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
                     # verify if signature is valid
                     valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
                     if valid_sig:
@@ -947,6 +1003,11 @@ def recv_msg_from_mb():
                         print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                         client_socket.close()
                         connectToServer()
+                else:
+                    print "Certificate does not correspond to server."
+                    print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                    client_socket.close()
+                    connectToServer()
             else:
                 print "Message was not in the correct format"
         else:
@@ -1056,16 +1117,27 @@ def status():
         # check if hmac is correct
         if verify_HMAC(data):
             if set({'error', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
-                # verify if signature is valid
-                valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
-                if valid_sig:
-                    print "\nERROR: ", j['error']
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
+                    # verify if signature is valid
+                    valid_sig = validateServerSig(j['cert'], j['error'], j['sign'], j['datetime'])
+                    if valid_sig:
+                        print "\nERROR: ", j['error']
+                    else:
+                        print "Signature is not correct!"
+                        print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                        client_socket.close()
+                        connectToServer()
                 else:
-                    print "Signature is not correct!"
+                    print "Certificate does not correspond to server."
                     print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                     client_socket.close()
                     connectToServer()
             elif set({'result', 'cert', 'sign', 'datetime'}).issubset(set(j.keys())):
+                # verify if certificate correspond to server
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, j['cert'])
+                if server_cert.get_subject().__getattr__('CN') == server_name:
                     # verify if signature is valid
                     valid_sig = validateServerSig(j['cert'], j['sn'], j['sign'], j['datetime'])
                     if valid_sig:
@@ -1106,6 +1178,11 @@ def status():
                         print "\nCommunication may be compromised.\nClosing connection and opening a new one."
                         client_socket.close()
                         connectToServer()
+                else:
+                    print "Certificate does not correspond to server."
+                    print "\nCommunication may be compromised.\nClosing connection and opening a new one."
+                    client_socket.close()
+                    connectToServer()
             else:
                 print "Message was not in the expected format"
         else:

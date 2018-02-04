@@ -137,6 +137,19 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['uuid'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -145,6 +158,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         me = self.registry.addUser(data)
@@ -184,6 +200,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['sn'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -192,8 +222,10 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
-
 
         log(logging.DEBUG, "List %s" % userStr)
 
@@ -244,6 +276,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['id'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -252,6 +298,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         msg = {"result":  self.registry.userNewMessages(user), "sn": data['sn']+1}
@@ -297,6 +346,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['id'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -305,6 +368,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         msg = {"result": [self.registry.userAllMessages(user), self.registry.userSentMessages(user)], "sn": data['sn']+1}
@@ -340,6 +406,9 @@ class ServerActions:
             error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         if not self.registry.userExists(srcId):
@@ -379,6 +448,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['msg'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -387,6 +470,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         # Save message and copy
@@ -423,6 +509,9 @@ class ServerActions:
             error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         if not self.registry.userExists(fromId):
@@ -452,6 +541,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['msg'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -460,6 +563,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         # Read message
@@ -498,6 +604,9 @@ class ServerActions:
             error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         if not self.registry.messageWasRed(str(fromId), msg):
@@ -517,6 +626,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['sn'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -525,6 +648,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         self.registry.storeReceipt(fromId, msg, receipt)
@@ -551,6 +677,9 @@ class ServerActions:
             error_msg = {"error": "Your client id is not correct!", "sn": data['sn']+1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         if not self.registry.copyExists(fromId, msg):
@@ -570,6 +699,20 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket",
+                         "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['id'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -578,6 +721,9 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         # Read message
@@ -598,46 +744,6 @@ class ServerActions:
 
         #verificar se a mensagem esta no formato correto
         if set({'B', 'sign', 'cert', 'datetime'}).issubset(set(data.keys())):
-
-            '''
-            # verify if signature is valid
-            certificate = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
-            print data['cert']
-            print type(data['cert'])
-            cert = M2Crypto.X509.load_cert_string(data['cert'])
-            s = data['sign']
-            sig = base64.decodestring(s)
-
-            pub_key = cert.get_pubkey()
-            pub_key.verify_init()
-            pub_key.verify_update(str(data['B']))
-            valid_sig = pub_key.verify_final(sig)
-            if valid_sig != 1:
-                log(logging.ERROR, "Badly formated \"status\" message: " +
-                    json.dumps(data))
-                client.sendResult({"error": "invalid signature"})
-
-            # verify if certificate is valid
-            print data['cert']
-            print type(data['cert'])
-            certificate = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
-            chain = generateCertChain(certificate)
-            valid_cert = verifyChain(chain, certificate)
-            if valid_cert != None:
-                log(logging.ERROR, "Badly formated \"status\" message: " +
-                    json.dumps(data))
-                client.sendResult({"error": "cannot validate cerfiticate with given certificate chain"})
-
-            # validate signature time
-            date1 = datetime.datetime.strptime(certificate.get_notAfter(), '%Y%m%d%H%M%SZ')
-            date2 = datetime.datetime.strptime(data['datetime'], '%Y-%m-%dT%H:%M:%S.%f')
-            date3 = datetime.datetime.strptime(certificate.get_notBefore(), '%Y%m%d%H%M%SZ')
-            if date1 <= date2:
-                print "Invalid signature time"
-            if date3 >= date2:
-                print "Invalid signature time"
-            
-            '''
             valid_sig = validateUserSig(data['cert'], data['B'], data['sign'], data['datetime'])
             if not valid_sig:
                 log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
@@ -656,20 +762,32 @@ class ServerActions:
                     try:
                         #Calcular K = B^a mod p
                         client.skey = (data['B']**client.a)%client.p
-                        msg_ok = {'ok' : "ok", 'sn': data['sn'] + 1}
+                        msg_ok = {'ok': "ok", 'sn': data['sn'] + 1}
                     except:
-                        msg_ok = {'ok' : "not ok", 'sn': data['sn'] + 1}
+                        msg_ok = {'ok': "not ok", 'sn': data['sn'] + 1}
 
             # sign uuid to send to user
             serverSignMessage(server_cert, privkey, 'ok', msg_ok)
 
             client.sendResult(msg_ok)
 
-        elif set({'ok'}).issubset(set(data.keys())):
+        #fim do processo diffie-hellman
+        elif set({'ok', 'sign', 'cert', 'datetime'}).issubset(set(data.keys())):
+            valid_sig = validateUserSig(data['cert'], data['ok'], data['sign'], data['datetime'])
+            if not valid_sig:
+                log(logging.ERROR, "Signature is not correct: " + json.dumps(data))
+                # sign error msg to send to client
+                error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
+                serverSignMessage(server_cert, privkey, 'error', error_msg)
+                client.sendResult(error_msg, client)
+                return
+
             if data['ok'] == "ok":
                 logging.info("Session Key established")
+                server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+                client.name = server_cert.get_subject().__getattr__('CN')
             else:
-                logging.info("Session Key not established") #fechar o socket do user
+                logging.info("Session Key not established")
         else:
             log(logging.ERROR, "Badly formated \"status\" message: " +
                 json.dumps(data))
@@ -700,6 +818,19 @@ class ServerActions:
             client.sendResult(self.encapsulate_msg(error_msg, client))
             return
 
+        # verify if certificate correspond to client
+        client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, data['cert'])
+        if client_cert.get_subject().__getattr__('CN') != client.name:
+            log(logging.ERROR, "Certificate does not correspond to client associated to this socket")
+            # sign error msg to send to client
+            error_msg = {"error": "Certificate does not correspond to client associated to this socket", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            #closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
+            return
+
         # verify if signature is valid
         valid_sig = validateUserSig(data['cert'], data['uuid'], data['sign'], data['datetime'])
         if not valid_sig:
@@ -708,12 +839,22 @@ class ServerActions:
             error_msg = {"error": "signature does not match", "sn": data['sn'] + 1}
             serverSignMessage(server_cert, privkey, 'error', error_msg)
             client.sendResult(self.encapsulate_msg(error_msg, client))
+            # closing connection to client
+            log(logging.ERROR, "Connection may be compromised. Closing connection.")
+            client.socket.close()
             return
 
         if self.registry.uuidExists(data['uuid']):
             client.id = self.registry.getUserId(data['uuid'])
+        else:
+            log(logging.ERROR, "Uuid does not exists")
+            # sign error msg to send to client
+            error_msg = {"error": "uuid does not exists", "sn": data['sn'] + 1}
+            serverSignMessage(server_cert, privkey, 'error', error_msg)
+            client.sendResult(self.encapsulate_msg(error_msg, client))
+            return
 
-        msg = {'id' : client.id, "sn": data['sn']+1}
+        msg = {'id': client.id, "sn": data['sn']+1}
 
         # sign id to send to user
         serverSignMessage(server_cert, privkey, 'id', msg)

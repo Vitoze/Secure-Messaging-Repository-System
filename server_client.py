@@ -24,6 +24,7 @@ class Client:
         self.p = None
         self.a = None
         self.skey = None
+        self.name = None
 
     def __str__(self):
         """ Converts object into string.

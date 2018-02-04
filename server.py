@@ -153,7 +153,6 @@ class Server:
         data = None
         try:
             data = s.recv(BUFSIZE)
-            #print "DATA!!!!" + data
             log(logging.DEBUG,
                 "Received data from %s. Message:\n%r" % (client, data))
         except:
